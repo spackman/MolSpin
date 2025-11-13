@@ -14,6 +14,8 @@
 #include "State.h"
 #include "ObjectParser.h"
 #include "Utility.h"
+#include "Operator.h"
+
 
 namespace RunSection
 {
@@ -121,6 +123,17 @@ namespace RunSection
 			}
 
 			L.submat(nextDimension, nextDimension, nextDimension + i->second->SpaceDimensions() - 1, nextDimension + i->second->SpaceDimensions() - 1) -= K;
+
+			// Get the relaxation terms, assuming that they can just be added to the Liouvillian superoperator
+			arma::sp_cx_mat R;
+			for (auto t = i->first->operators_cbegin(); t != i->first->operators_cend(); t++)
+			{
+				if (i->second->RelaxationOperator((*t), R))
+				{
+					L.submat(nextDimension, nextDimension, nextDimension + i->second->SpaceDimensions() - 1, nextDimension + i->second->SpaceDimensions() - 1) += R;
+					this->Log() << "Added relaxation operator \"" << (*t)->Name() << "\" to the Liouvillian.\n";
+				}
+			}
 
 			// Obtain the creation operators - note that we need to loop through the other SpinSystems again to find transitions leading into the current SpinSystem
 			unsigned int nextCDimension = 0; // Similar to nextDimension, but to keep track of first dimension for this other SpinSystem

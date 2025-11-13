@@ -21,20 +21,6 @@ SpinSystem RPC
 		tensor = isotropic("1.0");
 	}
 	
-	Spin nucleus2
-	{
-		spin = 1/2;
-		type = nucleus;
-		tensor = isotropic("1.0");
-	}
-
-	Spin nucleus3
-	{
-		spin = 1/2;
-		type = nucleus;
-		tensor = isotropic("1.0");
-	}
-	
 	Interaction Hyperfine1
  	{
 		type = Hyperfine;
@@ -46,17 +32,6 @@ SpinSystem RPC
 		prefactor =3.568245455e-5;
  	}
 
- 	Interaction Hyperfine2
- 	{
- 		type = Hyperfine;
- 		group1 = electron2;
- 		group2 = nucleus2;
-		tensor=matrix(" -0.36082693 -0.0702137 -1.41518116;
-						-0.0702137 -0.60153649 0.32312139;
-						-1.41518116 0.32312139 50.80213093");
-		prefactor =3.568245455e-5;
- 	}
-
 	Interaction Zeeman
 	{
 		type = Zeeman;
@@ -64,49 +39,86 @@ SpinSystem RPC
 		spins = electron1, electron2;
 	}
 
-
-	State Singlet
+	State SingletUP
 	{
 		spins(electron1, electron2) = |1/2,-1/2> - |-1/2,1/2>;
+		spin(nucleus1) = |1/2>;
 	}
 
-	State T0
+	State SingletDOWN
+	{
+		spins(electron1, electron2) = |1/2,-1/2> - |-1/2,1/2>;
+		spin(nucleus1) = |-1/2>;
+	}
+
+	State T0UP
 	{
 		spins(electron1, electron2) = |1/2,-1/2> + |-1/2,1/2>;
+		spin(nucleus1) = |1/2>;
+	}
+	State T0DOWN
+	{
+		spins(electron1, electron2) = |1/2,-1/2> + |-1/2,1/2>;
+		spin(nucleus1) = |-1/2>;
 	}
 
-	State TPlus
+	State TPlusUP
 	{
 		spins(electron1) = |1/2>;
 		spins(electron2) = |1/2>;
+		spin(nucleus1) = |1/2>;
 	}
 
-	State TMinus
+	State TPlusDOWN
+	{
+		spins(electron1) = |1/2>;
+		spins(electron2) = |1/2>;
+		spin(nucleus1) = |-1/2>;
+	}
+
+	State TMinusUP
 	{
 		spins(electron1) = |-1/2>;
 		spins(electron2) = |-1/2>;
+		spin(nucleus1) = |1/2>;
+	}
+
+	State TMinusDOWN
+	{
+		spins(electron1) = |-1/2>;
+		spins(electron2) = |-1/2>;
+		spin(nucleus1) = |-1/2>;
 	}
 	
 	State Identity
 	{
 	}
 
+	State Singlet { spins(electron1, electron2) = |1/2,-1/2> - |-1/2,1/2>; }
+	State T0 { spins(electron1, electron2) = |1/2,-1/2> + |-1/2,1/2>; }
+	State TP { spins(electron1) = |1/2>; spins(electron2) = |1/2>;}
+	State TD { spins(electron1) = |-1/2>; spins(electron2) = |-1/2>;}	
+
 	Transition SingletDecay
 	{
-		rate = 0;
+		rate = 10;
 		source = Singlet;
 	}
 	
 	Transition spinindependent_decay
 	{
-		rate = 0;
+		rate = 1;
 		source = Identity;
 	}
 
-	Transition RPtransitionSinglet 	{rate = 1; source = Singlet; targetsystem = RPD; targetstate = Singlet;}
-	Transition RPtransitionTriplet 	{rate = 1; source = T0; targetsystem = RPD; targetstate = T0;}
-	Transition RPtransitionTPlus 	{rate = 1; source = TPlus; targetsystem = RPD; targetstate = TPlus;}
-	Transition RPtransitionTMinus 	{rate = 1; source = TMinus; targetsystem = RPD; targetstate = TMinus;}
+	Transition RPtransitionSingletUP 	{rate = 10; source = SingletUP; targetsystem = RPD; targetstate = SingletUP;}
+	Transition RPtransitionSingletDOWN 	{rate = 10; source = SingletDOWN; targetsystem = RPD; targetstate = SingletDOWN;}
+	Transition RPtransitionTripletUP 	{rate = 10; source = T0UP; targetsystem = RPD; targetstate = T0UP;}
+	Transition RPtransitionTripletDOWN 	{rate = 10; source = T0DOWN; targetsystem = RPD; targetstate = T0DOWN;}
+	Transition RPtransitionTPlusUP 	{rate = 10; source = TPlusUP; targetsystem = RPD; targetstate = TPlusUP;}
+	Transition RPtransitionTPlusDOWN 	{rate = 10; source = TPlusDOWN; targetsystem = RPD; targetstate = TPlusDOWN;}
+	Transition RPtransitionTMinusUP 	{rate = 10; source = TMinusUP; targetsystem = RPD; targetstate = TMinusDOWN;}
+	Transition RPtransitionTMinusDOWN 	{rate = 10; source = TMinusUP; targetsystem = RPD; targetstate = TMinusDOWN;}
 
 	Properties prop
 	{
@@ -138,20 +150,6 @@ SpinSystem RPD
 		tensor = isotropic("1.0");
 	}
 	
-	Spin nucleus2
-	{
-		spin = 1/2;
-		type = nucleus;
-		tensor = isotropic("1.0");
-	}
-
-	Spin nucleus3
-	{
-		spin = 1/2;
-		type = nucleus;
-		tensor = isotropic("1.0");
-	
-
 	Interaction Zeeman
 	{
 		type = Zeeman;
@@ -170,52 +168,79 @@ SpinSystem RPD
 		prefactor =3.568245455e-5;
 	}
 
-	Interaction Hyperfine4
-	{
-		type = Hyperfine;
-		group1 = electron2;
-		group2 = nucleus3;
-		tensor=matrix(" -0.294412424 -0.0568059200 -1.02860888;
- 						-0.0568059200 -0.540578469  -0.0267686240;
- 						-1.02860888 -0.0267686240 50.5815320 ");
-		prefactor =3.568245455e-5;
-	}
-
-	State Singlet
+	State SingletUP
 	{
 		spins(electron1, electron2) = |1/2,-1/2> - |-1/2,1/2>;
+		spin(nucleus1) = |1/2>;
 	}
 
-	State T0
+	State SingletDOWN
+	{
+		spins(electron1, electron2) = |1/2,-1/2> - |-1/2,1/2>;
+		spin(nucleus1) = |-1/2>;
+	}
+
+	State T0UP
 	{
 		spins(electron1, electron2) = |1/2,-1/2> + |-1/2,1/2>;
+		spin(nucleus1) = |1/2>;
+	}
+	State T0DOWN
+	{
+		spins(electron1, electron2) = |1/2,-1/2> + |-1/2,1/2>;
+		spin(nucleus1) = |-1/2>;
 	}
 
-	State TPlus
+	State TPlusUP
 	{
 		spins(electron1) = |1/2>;
 		spins(electron2) = |1/2>;
+		spin(nucleus1) = |1/2>;
 	}
 
-	State TMinus
+	State TPlusDOWN
+	{
+		spins(electron1) = |1/2>;
+		spins(electron2) = |1/2>;
+		spin(nucleus1) = |-1/2>;
+	}
+
+	State TMinusUP
 	{
 		spins(electron1) = |-1/2>;
 		spins(electron2) = |-1/2>;
+		spin(nucleus1) = |1/2>;
+	}
+
+	State TMinusDOWN
+	{
+		spins(electron1) = |-1/2>;
+		spins(electron2) = |-1/2>;
+		spin(nucleus1) = |-1/2>;
 	}
 	
 	State Identity
 	{
 	}
 
-	Transition RPtransitionSinglet 	{rate = 1; source = Singlet; 	targetsystem = RPC; targetstate = Singlet;}
-	Transition RPtransitionTriplet 	{rate = 1; source = T0; 	targetsystem = RPC; targetstate = T0;}
-	Transition RPtransitionTPlus 	{rate = 1; source = TPlus; 		targetsystem = RPC; targetstate = TPlus;}
-	Transition RPtransitionTMinus 	{rate = 1; source = TMinus; 	targetsystem = RPC; targetstate = TMinus;}
+	State Singlet { spins(electron1, electron2) = |1/2,-1/2> - |-1/2,1/2>; }
+	State T0 { spins(electron1, electron2) = |1/2,-1/2> + |-1/2,1/2>; }
+	State TP { spins(electron1) = |1/2>; spins(electron2) = |1/2>;}
+	State TD { spins(electron1) = |-1/2>; spins(electron2) = |-1/2>;}	
+
+	Transition RPtransitionSingletUP 	{rate = 10; source = SingletUP; targetsystem = RPC; targetstate = SingletUP;}
+	Transition RPtransitionSingletDOWN 	{rate = 10; source = SingletDOWN; targetsystem = RPC; targetstate = SingletDOWN;}
+	Transition RPtransitionTripletUP 	{rate = 10; source = T0UP; targetsystem = RPC; targetstate = T0UP;}
+	Transition RPtransitionTripletDOWN 	{rate = 10; source = T0DOWN; targetsystem = RPC; targetstate = T0DOWN;}
+	Transition RPtransitionTPlusUP 	{rate = 10; source = TPlusUP; targetsystem = RPC; targetstate = TPlusUP;}
+	Transition RPtransitionTPlusDOWN 	{rate = 10; source = TPlusDOWN; targetsystem = RPC; targetstate = TPlusDOWN;}
+	Transition RPtransitionTMinusUP 	{rate = 10; source = TMinusUP; targetsystem = RPC; targetstate = TMinusDOWN;}
+	Transition RPtransitionTMinusDOWN 	{rate = 10; source = TMinusUP; targetsystem = RPC; targetstate = TMinusDOWN;}
 
 
 	Transition spinindependent_decay2
 	{
-		rate = 0;
+		rate = 1;
 		source = Identity;
 	}
 
@@ -248,3 +273,6 @@ Settings
 		steps = 1;
 	}
 }
+
+
+

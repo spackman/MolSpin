@@ -20,7 +20,7 @@ namespace SpinAPI
 	// -----------------------------------------------------
 	// The constructor sets up the pulse parameters, but
 	// the spin groups are read in the method ParseSpinGroups instead.
-	Pulse::Pulse(std::string _name, std::string _contents) : properties(std::make_shared<MSDParser::ObjectParser>(_name, _contents)), type(PulseType::Unspecified), group(), timestep(0.1), rotationaxis({0, 0, 0}), angle(0.0), pulsetime(0.001), field({0, 0, 0}), frequency(0.0), addCommonPrefactorList(), ignoreTensorsList(), prefactorList()
+	Pulse::Pulse(std::string _name, std::string _contents) : properties(std::make_shared<MSDParser::ObjectParser>(_name, _contents)), type(PulseType::Unspecified), group(), timestep(0.1), rotationaxis({0, 0, 0}), angle(0.0), pulsetime(0.0), field({0, 0, 0}), frequency(0.0), addCommonPrefactorList(), ignoreTensorsList(), prefactorList()
 	{
 		// Filling required parameter
 		std::string str = "";
@@ -33,6 +33,8 @@ namespace SpinAPI
 			this->type = PulseType::LongPulse;
 		else if (str.compare("longpulsestaticfield") == 0 || str.compare("LongPulseStaticField") == 0)
 			this->type = PulseType::LongPulseStaticField;
+		else if (str.compare("mwpulse") == 0 || str.compare("MWPulse") == 0)
+			this->type = PulseType::MWPulse;
 
 		if (this->type == PulseType::InstantPulse)
 		{
@@ -49,21 +51,25 @@ namespace SpinAPI
 				std::cout << "Warning: Failed to obtain input for angle." << std::endl;
 				std::cout << "Using vector: " << angle << std::endl;
 			}
+
+			// Get Pulse timestep
+			if (!this->properties->Get("timestep", timestep))
+			{
+				std::cout << "Warning: Failed to obtain input for pulse timestep. The timestep will be set to 0.1 ns." << std::endl;
+			}
 		}
 		else if (this->type == PulseType::LongPulse)
 		{
 			// Get pulse time
 			if (!this->properties->Get("pulsetime", pulsetime))
 			{
-				std::
-						cout
-					<< "Warning: Failed to obtain input for pulsetime." << std::endl;
+				std::cout << "Warning: Failed to obtain input for pulsetime." << std::endl;
 			}
 
 			// Get Pulse timestep
 			if (!this->properties->Get("timestep", timestep))
 			{
-				std::cout << "Warning: Failed to obtain input for pulse timestep." << std::endl;
+				std::cout << "Warning: Failed to obtain input for pulse timestep. The timestep will be set to 0.1 ns." << std::endl;
 			}
 
 			// Get Pulse field
@@ -108,7 +114,7 @@ namespace SpinAPI
 			// Get Pulse timestep
 			if (!this->properties->Get("timestep", timestep))
 			{
-				std::cout << "Warning: Failed to obtain input for pulse timestep." << std::endl;
+				std::cout << "Warning: Failed to obtain input for pulse timestep. The timestep will be set to 0.1 ns." << std::endl;
 			}
 
 			// Get Pulse field
@@ -128,6 +134,51 @@ namespace SpinAPI
 			if (!this->properties->GetList("commonprefactorlist", addCommonPrefactorList))
 			{
 				std::cout << "Warning: Failed to obtain input for the CommonPrefactorList." << std::endl;
+			}
+
+			if (!this->properties->GetList("ignoretensorslist", ignoreTensorsList))
+			{
+				std::cout << "Warning: Failed to obtain input for the ignoreTensorList." << std::endl;
+			}
+		}
+		else if (this->type == PulseType::MWPulse)
+		{
+			// Get pulse time
+			if (!this->properties->Get("pulsetime", pulsetime))
+			{
+				std::cout << "Warning: Failed to obtain input for pulsetime." << std::endl;
+			}
+
+			// Get Pulse timestep
+			if (!this->properties->Get("timestep", timestep))
+			{
+				std::cout << "Warning: Failed to obtain input for pulse timestep. The timestep will be set to 0.1 ns." << std::endl;
+			}
+
+			// Get Pulse field
+			if (!this->properties->Get("field", field))
+			{
+				std::cout << "Warning: Failed to obtain input for the field." << std::endl;
+				std::cout << "Using vector: " << field << std::endl;
+			}
+
+			// Get pulse frequency
+			if (!this->properties->Get("frequency", frequency))
+			{
+				std::cout << "Warning: Failed to obtain input for the pulse frequency." << std::endl;
+				std::cout << "Using frequency: " << frequency << std::endl;
+			}
+
+			// Get prefactor list
+			if (!this->properties->GetList("prefactorlist", prefactorList))
+			{
+				std::cout << "Warning: Failed to obtain input for the prefactorList." << std::endl;
+			}
+
+			// Get prefactor properties
+			if (!this->properties->GetList("commonprefactorlist", addCommonPrefactorList))
+			{
+				std::cout << "Warning: Failed to obtain input for the commonPrefactorList." << std::endl;
 			}
 
 			if (!this->properties->GetList("ignoretensorslist", ignoreTensorsList))
@@ -189,6 +240,8 @@ namespace SpinAPI
 		else if (this->type == PulseType::LongPulse && !this->group.empty())
 			return true;
 		else if (this->type == PulseType::LongPulseStaticField && !this->group.empty())
+			return true;
+		else if (this->type == PulseType::MWPulse && !this->group.empty())
 			return true;
 		else if (this->type == PulseType::ShapedPulse && !this->group.empty())
 			return true;
@@ -337,7 +390,7 @@ namespace SpinAPI
 				vectors.push_back(RunSection::NamedActionVector(_system + "." + this->Name() + ".rotationaxis", rotationaxisVector));
 			}
 
-			if (this->type == PulseType::LongPulse || this->type == PulseType::LongPulseStaticField)
+			if (this->type == PulseType::LongPulse || this->type == PulseType::LongPulseStaticField || this->type == PulseType::MWPulse)
 			{
 				// The field vector
 				RunSection::ActionVector fieldVector = RunSection::ActionVector(this->field, &CheckActionVectorPulseField);
@@ -364,6 +417,16 @@ namespace SpinAPI
 			}
 
 			if (this->type == PulseType::LongPulse)
+			{
+				// We should always have a scalar for the prefactor
+				RunSection::ActionScalar pulsetimeScalar = RunSection::ActionScalar(this->pulsetime, &CheckActionScalarPulseScalar);
+				scalars.push_back(RunSection::NamedActionScalar(_system + "." + this->Name() + ".pulsetime", pulsetimeScalar));
+
+				RunSection::ActionScalar frequencyScalar = RunSection::ActionScalar(this->frequency, &CheckActionScalarPulseScalar);
+				scalars.push_back(RunSection::NamedActionScalar(_system + "." + this->Name() + ".frequency", frequencyScalar));
+			}
+
+			if (this->type == PulseType::MWPulse)
 			{
 				// We should always have a scalar for the prefactor
 				RunSection::ActionScalar pulsetimeScalar = RunSection::ActionScalar(this->pulsetime, &CheckActionScalarPulseScalar);
