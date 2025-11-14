@@ -12,7 +12,7 @@
 namespace RunSection
 {
 
-    FibSpherePoint *CalculatePoints(int n)
+    FibSpherePoint *CalculateFibPoints(int n)
     {
         FibSpherePoint* TempPointArray = (FibSpherePoint*)malloc(n * sizeof(FibSpherePoint));
         if(TempPointArray == NULL)
@@ -39,11 +39,13 @@ namespace RunSection
         float y = p.first;
         float theta = p.second;
         
-        double r = double r = std::sqrt(1.0 - (y * y));
+        double r = std::sqrt(1.0 - (y * y));
         double x = std::cos(theta) * r;
-        double y = std::sin(theta) * r;
+        double z = std::sin(theta) * r;
 
-        arr = {x, y, z};
+        double yd = (double)y;
+
+        arr = {x, yd, z};
         return true;
     }
 

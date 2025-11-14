@@ -9,7 +9,7 @@
 #include "ObjectParser.h"
 
 #include <array>
-#include "utility.h"
+#include "Utility.h"
 
 namespace RunSection
 {
@@ -31,7 +31,7 @@ namespace RunSection
 
     bool ActionFibonacciSphere::CalculatePoints(int n)
     {
-        m_Points = CalculatePoints(n);
+        m_Points = CalculateFibPoints(n);
 
         if (m_Points == NULL)
         {
@@ -49,7 +49,7 @@ namespace RunSection
             return false;
         }
         bool PointRetrieved = RetrievePoint(arr,m_Points,m_Step);
-        
+
         double x = m_Magnitude * arr[0];
         double y = m_Magnitude * arr[1];
         double z = m_Magnitude * arr[2];
@@ -57,7 +57,7 @@ namespace RunSection
         m_Step++;
 
         arr = {x, y, z};
-        return true;
+        return PointRetrieved;
     }
 
     bool ActionFibonacciSphere::DoStep()

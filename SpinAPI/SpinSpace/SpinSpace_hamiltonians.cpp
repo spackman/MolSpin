@@ -8,6 +8,7 @@
 // (c) 2025 Quantum Biology and Computational Physics Group.
 // See LICENSE.txt for license information.
 /////////////////////////////////////////////////////////////////////////
+
 namespace SpinAPI
 {
 	// -----------------------------------------------------
@@ -526,11 +527,17 @@ namespace SpinAPI
 			//  Grab amplitude and orientation parameters
 			const double   B0   = _interaction->Hfiamplitude();     // Tesla
 			const int   n    = _interaction->Orientations(); // averaging grid
+			const double sqn = _interaction->SpinQuantumNumber(); //spin quantum number (e.g 1/2) 
+
 
 			// Build Sx, Sy, Sz for *each* electron in Group1
 			arma::sp_cx_mat Sx;
 			arma::sp_cx_mat Sy;
 			arma::sp_cx_mat Sz;
+			
+			std::vector<arma::sp_cx_mat> Samples; 
+
+			tmp = arma::zeros<arma::sp_cx_mat>(this->HilbertSpaceDimensions(), n*this->HilbertSpaceDimensions());
 
 			// Fill the matrix with the sum of all the interactions (i.e. between spin magnetic moment and fields)
 			for (auto i = spinlist.cbegin(); i != spinlist.cend(); i++)
@@ -547,19 +554,36 @@ namespace SpinAPI
 					this->CreateOperator((*i)->Ty(), (*i), Sy);
 					this->CreateOperator((*i)->Tz(), (*i), Sz);
 				}
-
-				// Semi-classical average  (weight = ½ sinθ Δθ)
-				for (int k = 0; k < n; ++k)
+				
+				RunSection::FibSpherePoint* points = RunSection::CalculateFibPoints(n);
+				int currentcol = 0;
+				for (int k = 0; k < n; k++)
 				{
-					double theta      = M_PI * (k + 0.5) / n;
-					double weight = 0.5 * std::sin(theta) * (M_PI / n);
+					arma::sp_cx_mat SampleTmp = arma::zeros<arma::sp_cx_mat>(this->HilbertSpaceDimensions(), this->HilbertSpaceDimensions());
+					std::array<double,3> NuclearSpinVector; 
+					RunSection::RetrievePoint(NuclearSpinVector,points,k);
+					double x = NuclearSpinVector[0];
+					double y = NuclearSpinVector[1];
+					double z = NuclearSpinVector[2];
 
-					// Local field components in the *molecule* frame
-					double Bx = B0 * std::sin(theta);
-					double Bz = B0 * std::cos(theta);
-
-					tmp += weight * (Bx * Sx + Bz * Sz);   // Sy-component = 0 by symmetry
+					SampleTmp = B0 * Sx * x + B0 * Sy * y + B0 * Sz * z;
+					std::cout << SampleTmp << std::endl;
+					tmp.submat(0,currentcol,this->HilbertSpaceDimensions()-1,currentcol+this->HilbertSpaceDimensions()-1) = SampleTmp;
+					currentcol += this->HilbertSpaceDimensions();
 				}
+				free(points);
+				// Semi-classical average  (weight = ½ sinθ Δθ)
+				//or (int k = 0; k < n; ++k)
+				//
+				//	double theta      = M_PI * (k + 0.5) / n;
+				//	double weight = 0.5 * std::sin(theta) * (M_PI / n);
+
+				//	// Local field components in the *molecule* frame
+				//	double Bx = B0 * std::sin(theta);
+				//	double Bz = B0 * std::cos(theta);
+
+				//	tmp += weight * (Bx * Sx + Bz * Sz);   // Sy-component = 0 by symmetry
+				//
 			}
 		}
 		else
@@ -584,19 +608,29 @@ namespace SpinAPI
 		{
 			arma::sp_cx_mat lhs;
 			arma::sp_cx_mat rhs;
-			auto result = this->SuperoperatorFromLeftOperator(tmp, lhs);
-			result &= this->SuperoperatorFromRightOperator(tmp, rhs);
-			if (result)
-				_out = lhs - rhs;
-			else
-				return false;
+			int submats = tmp.n_cols / this->HilbertSpaceDimensions();
+			std::cout << submats << std::endl;
+			int superoperatorspace = this->HilbertSpaceDimensions() * this->HilbertSpaceDimensions();
+			_out = arma::zeros<arma::sp_cx_mat>(superoperatorspace, submats * superoperatorspace);
+			for (int i = 0; i < submats; i++)
+			{  
+				auto tmpmat = tmp.submat(0,i*this->HilbertSpaceDimensions(), this->HilbertSpaceDimensions()-1, (i+1)*this->HilbertSpaceDimensions()-1);
+				auto result = this->SuperoperatorFromLeftOperator(tmpmat, lhs);
+				result &= this->SuperoperatorFromRightOperator(tmpmat, rhs);
+				if (result)
+				{
+					_out.submat(0,i*superoperatorspace, superoperatorspace-1 ,(i+1)*superoperatorspace - 1) = lhs - rhs;
+				}
+				else
+					return false;
+			}
 		}
 		else
 		{
 			// We already have the result in the dense matrix to the Hamiltonian at the given time or trajectorye Hilbert space
 			_out = tmp;
 		}
-
+		std::cout << _out << std::endl;
 		return true;
 	}
 

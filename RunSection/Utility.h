@@ -20,7 +20,7 @@ namespace RunSection
 
 #pragma region FibSphere
     typedef std::pair<float, float> FibSpherePoint;
-    FibSpherePoint* CalculatePoints(int n);
+    FibSpherePoint* CalculateFibPoints(int n);
     bool RetrievePoint (std::array<double, 3> &arr, FibSpherePoint* ptr, int num);
 #pragma endregion
 
