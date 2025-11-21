@@ -11,6 +11,8 @@
 #define MOD_SpinAPI_Interaction
 
 #include <vector>
+#include <functional> 
+#include <array>
 #include <memory>
 #include <armadillo>
 #include "SpinAPIDefines.h"
@@ -22,6 +24,8 @@
 namespace SpinAPI
 {
 	typedef std::tuple<double,int,double> SCHyperfineField;
+	typedef std::function<double (std::array<double,3>)> SCDistributionF;
+
 	enum class SCDistribution
 	{
 		FJC = 0, //Freely jointed chain
@@ -86,7 +90,7 @@ namespace SpinAPI
 		std::vector<SCHyperfineField> hffield;
 		unsigned int orientations;
 		std::vector<double> BondLengths;
-		double TotalLength;
+		double tau;
 		SCDistribution dist;
 
 		// Special data members for random number generation
@@ -169,6 +173,9 @@ namespace SpinAPI
 
 		// Public method for creating ActionTargets
 		void GetActionTargets(std::vector<RunSection::NamedActionScalar> &, std::vector<RunSection::NamedActionVector> &, const std::string &);
+
+		//get distribution functiom
+		SCDistributionF f;
 	};
 
 	// Define alias for interaction-pointers
@@ -192,8 +199,8 @@ namespace SpinAPI
 	bool CheckActionScalarInteractionPrefactor(const double &);
 
 	//semi classical distributions
-    void FreelyJointedPolymerBL(std::vector<double>&, std::vector<SCHyperfineField>& ); //length of the nuclear spin vector
-    void FreelyJointedPolymerD(std::vector<weightings>&, std::vector<double>&, double); //Distribution of the nuclear spin vector
+    void FreelyJointedPolymerBL(std::vector<double>&, std::vector<SCHyperfineField>&, double&, int); //length of the nuclear spin vector
+	SCDistributionF FreelyJointedPolymerD(double,double); //Distribution of the nuclear spin vector
 }
 
 #endif

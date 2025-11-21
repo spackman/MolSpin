@@ -9,6 +9,7 @@
 ///////////////////////////////////////////////////////////////////////////
 #include <memory>
 #include <iostream>
+#include <cmath>
 #include <Spin.h>
 #include "ObjectParser.h"
 #include "Interaction.h"
@@ -200,7 +201,15 @@ namespace SpinAPI
 				}
 
 				if(this->dist == SCDistribution::FJC || this->dist == SCDistribution::DEFUALT)
-					FreelyJointedPolymerBL(this->BondLengths,this->hffield);
+				{
+					FreelyJointedPolymerBL(this->BondLengths,this->hffield, this->tau, this->orientations);
+					
+					double prefactor = this->tau * 0.25 * M_1_PI; //tua^2 / 4pi
+					prefactor = std::pow(prefactor,3.0/2.0);
+					double exp1 = -0.25  * this->tau;
+					this->f = FreelyJointedPolymerD(prefactor,exp1);
+				}
+
 			}
 
 
@@ -486,7 +495,7 @@ namespace SpinAPI
 																tdTimestep(_interaction.tdTimestep), tdInitialTensor(_interaction.tdInitialTensor),
 																tdMinFreq(_interaction.tdMinFreq), tdMaxFreq(_interaction.tdMaxFreq), tdFreqs(_interaction.tdFreqs), tdAmps(_interaction.tdAmps), tdPhases(_interaction.tdPhases),
 																tdComponents(_interaction.tdComponents), tdRandOrients(_interaction.tdRandOrients), tdThetas(_interaction.tdThetas), tdPhis(_interaction.tdPhis), tdCorrTime(_interaction.tdCorrTime),
-																tdPrintTensor(_interaction.tdPrintTensor), tdPrintField(_interaction.tdPrintField), tdSeed(_interaction.tdSeed), tdAutoseed(_interaction.tdAutoseed), tdGenerator(_interaction.tdGenerator), BondLengths(_interaction.BondLengths), dist(_interaction.dist)
+																tdPrintTensor(_interaction.tdPrintTensor), tdPrintField(_interaction.tdPrintField), tdSeed(_interaction.tdSeed), tdAutoseed(_interaction.tdAutoseed), tdGenerator(_interaction.tdGenerator), BondLengths(_interaction.BondLengths), dist(_interaction.dist), tau(_interaction.tau), f(_interaction.f)
 
 	{
 	}
@@ -507,6 +516,8 @@ namespace SpinAPI
 		this->hffield = _interaction.hffield;
 		this->orientations = _interaction.orientations;
 		this->BondLengths = _interaction.BondLengths;
+		this->tau = _interaction.tau;
+		this->f = _interaction.f;
 		this->dist = _interaction.dist;
 		this->type = _interaction.type;
 		this->fieldType = _interaction.fieldType;
@@ -1423,21 +1434,45 @@ namespace SpinAPI
 		return std::isfinite(_d);
 	}
     
-	void FreelyJointedPolymerBL(std::vector<double>& BondLengths, std::vector<SCHyperfineField>& Fields)
+	void FreelyJointedPolymerBL(std::vector<double>& BondLengths, std::vector<SCHyperfineField>& Fields, double& tau, int ori)
     {
+		std::vector<double> tau_sum;
 		for(auto f = Fields.begin(); f != Fields.end(); f++)
 		{
-			auto [a,n,sn] = (*f);
-			for(int i = 0; i < n; i++)
+ 			auto [a,n,sn] = (*f);
+			int N = n * ori;
+			//int N = n;
+			for(int i = 0; i < N; i++)
 			{
 				double bondlength = a * std::sqrt(sn * (sn+1));
+				//for(int e = 0; e < ori; e++)
+				//	BondLengths.push_back(bondlength);
 				BondLengths.push_back(bondlength);
+				tau_sum.push_back(std::pow(bondlength,2));
 			}
 		}
+		tau = std::reduce(tau_sum.begin(), tau_sum.end());
+		if(tau == 0)
+		{
+			tau = 0;
+		}
+		else
+		{
+			tau = 6.0 / tau;
+		}
     }
-    void FreelyJointedPolymerD(std::vector<weightings>&W, std::vector<double>& BL, double TotalLength)
-    {
 
+	SCDistributionF FreelyJointedPolymerD(double prefactor ,double exp1)
+    {
+		auto f = [=](std::array<double,3> vector) mutable {
+			double dot = 0;
+			dot += vector[0] * vector[0];
+			dot += vector[1] * vector[1];
+			dot += vector[2] * vector[2];
+			double weight = prefactor * std::exp(exp1*dot);
+			return weight;
+		};
+		return f;
     }
     // -----------------------------------------------------
 }

@@ -527,8 +527,12 @@ namespace SpinAPI
 
 			//  Grab amplitude and orientation parameters
 			int n = _interaction->Orientations();
+			std::vector<SCHyperfineField> hf = _interaction->Hfiamplitude();
 			std::vector<double> B = _interaction->VL();
-			double B0 = std::reduce(B.begin(),B.end());
+			//double B0 = std::reduce(B.begin(),B.end());
+			//double A = std::accumulate(hf.begin(), hf.end(), 0, [](double sum, SCHyperfineField b) {
+			//	return sum + std::get<0>(b);
+			//});
 
 			// Build Sx, Sy, Sz for *each* electron in Group1
 			arma::sp_cx_mat Sx;
@@ -557,20 +561,48 @@ namespace SpinAPI
 				
 				RunSection::FibSpherePoint* points = RunSection::CalculateFibPoints(n);
 				int currentcol = 0;
+				double totalweight = 0; //sanity checking
+				int vector = 0;
+				int count = 0;
 				for (int k = 0; k < n; k++)
 				{
-					arma::sp_cx_mat SampleTmp = arma::zeros<arma::sp_cx_mat>(this->HilbertSpaceDimensions(), this->HilbertSpaceDimensions());
-					std::array<double,3> NuclearSpinVector; 
-					RunSection::RetrievePoint(NuclearSpinVector,points,k);
-					double x = NuclearSpinVector[0];
-					double y = NuclearSpinVector[1];
-					double z = NuclearSpinVector[2];
-
-					SampleTmp = B0 * Sx * x + B0 * Sy * y + B0 * Sz * z;
-					tmp.submat(0,currentcol,this->HilbertSpaceDimensions()-1,currentcol+this->HilbertSpaceDimensions()-1) = SampleTmp;
-					currentcol += this->HilbertSpaceDimensions();
+ 					vector = k;
+					for (int a = 0; a < hf.size(); a++)
+					{
+						for (int N = 0; N < std::get<1>(hf[a]); N++)
+						{
+							arma::sp_cx_mat SampleTmp = arma::zeros<arma::sp_cx_mat>(this->HilbertSpaceDimensions(), this->HilbertSpaceDimensions());
+							std::array<double,3> NuclearSpinVector; 
+							RunSection::RetrievePoint(NuclearSpinVector,points,k);
+							double A = std::get<0>(hf[a]);
+							double B0 = B[vector];
+							double x = NuclearSpinVector[0] * B0;
+							double y = NuclearSpinVector[1] * B0;
+							double z = NuclearSpinVector[2] * B0;
+							double sampleweight = _interaction->f({x,y,z});
+							totalweight += sampleweight;
+							//this needs fixing
+							SampleTmp = B0 * Sx * x + B0 * Sy * y + B0 * Sz * z;
+							tmp.submat(0,currentcol,this->HilbertSpaceDimensions()-1,currentcol+this->HilbertSpaceDimensions()-1) = SampleTmp;
+							vector += n;
+							count += 1;
+						}
+					}
+					//currentcol += this->HilbertSpaceDimensions();
+					//arma::sp_cx_mat SampleTmp = arma::zeros<arma::sp_cx_mat>(this->HilbertSpaceDimensions(), this->HilbertSpaceDimensions());
+					//std::array<double,3> NuclearSpinVector; 
+					//RunSection::RetrievePoint(NuclearSpinVector,points,k);
+					//double x = NuclearSpinVector[0] * A;
+					//double y = NuclearSpinVector[1] * A;
+					//double z = NuclearSpinVector[2] * A;
+					//double sampleweight = _interaction->f({x,y,z});
+					//totalweight += sampleweight;
+					//SampleTmp = B0 * Sx * x + B0 * Sy * y + B0 * Sz * z;
+					//tmp.submat(0,currentcol,this->HilbertSpaceDimensions()-1,currentcol+this->HilbertSpaceDimensions()-1) = SampleTmp;
+					//currentcol += this->HilbertSpaceDimensions();
 				}
 				free(points);
+				std::cout << totalweight << std::endl;
 				// Semi-classical average  (weight = ½ sinθ Δθ)
 				//or (int k = 0; k < n; ++k)
 				//
