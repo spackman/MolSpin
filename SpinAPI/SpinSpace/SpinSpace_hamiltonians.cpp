@@ -561,7 +561,7 @@ namespace SpinAPI
 				
 				RunSection::MCSpherePoint* points = RunSection::CalculateMCSpherePoints(n,BMax);
 				int currentcol = 0;
-				double totalweight = 0; //sanity checking
+				std::vector<double> weights;
 
 				for (int k = 0; k < n; k++)
 				{
@@ -573,14 +573,20 @@ namespace SpinAPI
 					double z = NuclearSpinVector[2];
 					double r = std::sqrt(x*x + y*y + z*z);
 					double sampleweight = _interaction->f({x,y,z});
-					totalweight += sampleweight;
+					weights.push_back(sampleweight);
 					SampleTmp = Sx * x + Sy * y + Sz * z;
 					tmp.submat(0,currentcol,this->HilbertSpaceDimensions()-1,currentcol+this->HilbertSpaceDimensions()-1) = SampleTmp;
 					currentcol += this->HilbertSpaceDimensions();
 				}
 
 				free(points);
-				std::cout << totalweight << std::endl;
+				double area = 0;
+				for (int i = 0; i < weights.size()-1; i++)
+				{
+					double t = weights[i]+ weights[i+1];
+					area = (0.5*t) * 2*BMax/n + area;
+				}
+				_interaction->GetOriWeights() = weights;
 			}
 		}
 		else

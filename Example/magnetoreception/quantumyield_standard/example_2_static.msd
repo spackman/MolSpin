@@ -100,7 +100,7 @@ SpinSystem system1
 		type = semiclassicalfield;
 		group1 = RPElectron1;
 		HyperfineField = "(2,2,0.5),(3,5,1),(2,10),(3,10,1,5)";
-		orientations = 10000;
+		orientations = 1000;
 	}
 
 	// -------------------------

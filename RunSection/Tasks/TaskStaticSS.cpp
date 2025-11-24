@@ -15,6 +15,7 @@
 #include "SpinSystem.h"
 #include "ObjectParser.h"
 #include "Utility.h"
+#include "Interaction.h"
 
 namespace RunSection
 {
@@ -208,11 +209,22 @@ namespace RunSection
 			bool SC = false;
 			std::vector<std::pair<int,arma::cx_vec>> SCresults;
 			std::vector<arma::sp_cx_mat> As;
+			std::vector<std::vector<double>> AllWeights;
+			std::vector<std::vector<double>> SampleWeights;
+			{
+				for(auto e = (*i)->interactions_cbegin(); e != (*i)->interactions_cend(); e++)
+				{
+					if((*e)->Type() == SpinAPI::InteractionType::SemiClassicalField)
+					{
+						AllWeights.push_back((*e)->GetOriWeights());
+					}
+				}
+			}	
 			if(DataStruct.SamplesMatrix.n_nonzero != 0)
 			{
 				SC = true;
 				std::vector<SCData> SysData = {DataStruct};
-				GetSamples(As,A,SysData);
+				GetSamples(As,A,SysData, SampleWeights, AllWeights);
 			}
 
 			this->Log() << "Ready to perform calculation." << std::endl;
@@ -223,11 +235,15 @@ namespace RunSection
 				for (int i = 0; i < As.size(); i++)
 				{
 					arma::cx_vec result = solve(arma::conv_to<arma::cx_mat>::from(As[i]), rho0vec);
+					std::vector<double> weights = SampleWeights[i];
+					for(int j = 0; j < weights.size(); j++)
+					{
+						result *= weights[j];
+					}
 					#pragma omp critical
 					SCresults.push_back({i,result});
 				}
 
-				std::cout << SCresults[0].second << std::endl;
 			}
 
 			

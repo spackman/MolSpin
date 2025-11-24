@@ -31,6 +31,11 @@ namespace RunSection
         double theta;
         double phi;
         double r;
+
+        bool operator==(const MCSpherePoint &other) const
+        {
+            return (theta == other.theta) && (phi == other.phi) && (r == other.r);
+        }
     };
     MCSpherePoint* CalculateMCSpherePoints(int n, double rmax);
     bool RetrieveMCPoint (std::array<double, 3> &arr, MCSpherePoint* ptr, int num);

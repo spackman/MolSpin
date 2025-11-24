@@ -27,7 +27,6 @@
 #include "SpinAPIfwd.h"
 #include "ActionTarget.h"
 #include "Utility.h"
-
 namespace RunSection
 {
 
@@ -83,7 +82,7 @@ namespace RunSection
 		Propagator prop;
 		
 		//semi classical 
-		virtual void GetSamples(std::vector<arma::sp_cx_mat>&, arma::sp_cx_mat& A, std::vector<SCData>&);
+		virtual void GetSamples(std::vector<arma::sp_cx_mat>&, arma::sp_cx_mat& A, std::vector<SCData>&, std::vector<std::vector<double>>&, std::vector<std::vector<double>>&);
 
 	public:
 		// Constructors / Destructors

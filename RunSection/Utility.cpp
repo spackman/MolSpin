@@ -60,15 +60,29 @@ namespace RunSection
         }
         std::random_device RandDev;
         std::mt19937 Generator(RandDev());
-        std::uniform_real_distribution<double> distPhi(0,1); //multiply by 2pi;
-        std::uniform_real_distribution<double> distTheta(-1,1); //get acos of value between -1 and 1
-        std::uniform_real_distribution<double> distR(0,1); //multiply by rmax
+        std::uniform_real_distribution<double> distPhi(0,2.0*M_PI); //multiply by 2pi;
+        std::uniform_real_distribution<double> distTheta(0,M_PI);;
+        std::uniform_real_distribution<double> distR(0,rmax); //multiply by rmax
         for(int i = 0; i < n; i++)
         {
-            double phi = 2.0 * M_PI * distPhi(Generator);
-            double theta = std::acos(distTheta(Generator));
-            double r = rmax * distR(Generator);
+            double phi = distPhi(Generator);
+            double theta = distTheta(Generator);
+            double r = distR(Generator);
             TempPointArray[i] = {theta,phi,r};
+        }
+
+        std::vector<MCSpherePoint> UniquePoints;
+        UniquePoints.push_back(TempPointArray[0]);  
+        for (int i = 1; i < n; i++)
+        {
+            if(std::find(UniquePoints.begin(), UniquePoints.end(), TempPointArray[i]) == UniquePoints.end())
+            {
+                UniquePoints.push_back(TempPointArray[i]);
+            }
+            else
+            {
+                std::cin.get();
+            }
         }
         return TempPointArray;
     }

@@ -495,7 +495,8 @@ namespace SpinAPI
 																tdTimestep(_interaction.tdTimestep), tdInitialTensor(_interaction.tdInitialTensor),
 																tdMinFreq(_interaction.tdMinFreq), tdMaxFreq(_interaction.tdMaxFreq), tdFreqs(_interaction.tdFreqs), tdAmps(_interaction.tdAmps), tdPhases(_interaction.tdPhases),
 																tdComponents(_interaction.tdComponents), tdRandOrients(_interaction.tdRandOrients), tdThetas(_interaction.tdThetas), tdPhis(_interaction.tdPhis), tdCorrTime(_interaction.tdCorrTime),
-																tdPrintTensor(_interaction.tdPrintTensor), tdPrintField(_interaction.tdPrintField), tdSeed(_interaction.tdSeed), tdAutoseed(_interaction.tdAutoseed), tdGenerator(_interaction.tdGenerator), BondLengths(_interaction.BondLengths), dist(_interaction.dist), tau(_interaction.tau), f(_interaction.f)
+																tdPrintTensor(_interaction.tdPrintTensor), tdPrintField(_interaction.tdPrintField), tdSeed(_interaction.tdSeed), tdAutoseed(_interaction.tdAutoseed), tdGenerator(_interaction.tdGenerator), BondLengths(_interaction.BondLengths), dist(_interaction.dist), tau(_interaction.tau), f(_interaction.f),
+																OriWeights(_interaction.OriWeights)
 
 	{
 	}
@@ -517,6 +518,7 @@ namespace SpinAPI
 		this->orientations = _interaction.orientations;
 		this->BondLengths = _interaction.BondLengths;
 		this->tau = _interaction.tau;
+		this->OriWeights = _interaction.OriWeights;
 		this->f = _interaction.f;
 		this->dist = _interaction.dist;
 		this->type = _interaction.type;

@@ -89,6 +89,7 @@ namespace SpinAPI
 		//Special data members for Semi-Classical
 		std::vector<SCHyperfineField> hffield;
 		unsigned int orientations;
+		std::vector<double> OriWeights;
 		std::vector<double> BondLengths;
 		double tau;
 		SCDistribution dist;
@@ -149,6 +150,7 @@ namespace SpinAPI
 		//const double Hfiamplitude() const;
 		const std::vector<SCHyperfineField> Hfiamplitude() const;
 		const int Orientations() const;
+		std::vector<double>& GetOriWeights() { return this->OriWeights; };
 		const std::vector<double> VL() const { return this->BondLengths; }
 		bool HasFieldTimeDependence() const;
 		bool HasTensorTimeDependence() const;

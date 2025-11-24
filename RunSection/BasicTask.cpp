@@ -239,7 +239,7 @@ namespace RunSection
 		this->prop = Propagator::Default;
     }
 
-	void BasicTask::GetSamples(std::vector<arma::sp_cx_mat>& H, arma::sp_cx_mat& A, std::vector<SCData>& ori)
+	void BasicTask::GetSamples(std::vector<arma::sp_cx_mat>& H, arma::sp_cx_mat& A, std::vector<SCData>& ori, std::vector<std::vector<double>>& SampleWeights, std::vector<std::vector<double>>& AllWeights)
     {
 		std::vector<SampleCombination> Combinations; 
 		std::vector<std::vector<int>> samples;
@@ -253,6 +253,15 @@ namespace RunSection
 		for(int i = 0; i < Combinations.size(); i++)
 		{
 			H.push_back(GetHamiltonian(A,ori.size(),sampleHSC,Combinations[i]));
+			std::vector<double> weights;
+			for(int j = 0; j < Combinations[i].size(); j++)
+			{
+				for(int k = 0; k < Combinations[i][j].size(); k++)
+				{
+					weights.push_back(AllWeights[j][Combinations[i][j][k]]);
+				}
+			}
+			SampleWeights.push_back(weights);
 		}
     }
 
