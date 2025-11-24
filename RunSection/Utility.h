@@ -24,6 +24,18 @@ namespace RunSection
     bool RetrievePoint (std::array<double, 3> &arr, FibSpherePoint* ptr, int num);
 #pragma endregion
 
+#pragma region MonteCarloSphere
+    
+    struct MCSpherePoint
+    {
+        double theta;
+        double phi;
+        double r;
+    };
+    MCSpherePoint* CalculateMCSpherePoints(int n, double rmax);
+    bool RetrieveMCPoint (std::array<double, 3> &arr, MCSpherePoint* ptr, int num);
+#pragma endregion
+
 #pragma region SemiClassical
     struct SCData
     {

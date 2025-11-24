@@ -8,6 +8,7 @@
 /////////////////////////////////////////////////////////////////////////
 
 #include "Utility.h"
+#include <random>
 
 namespace RunSection
 {
@@ -46,6 +47,45 @@ namespace RunSection
         double yd = (double)y;
 
         arr = {x, yd, z};
+        return true;
+    }
+
+    MCSpherePoint* CalculateMCSpherePoints(int n, double rmax)
+    {
+        MCSpherePoint* TempPointArray = (MCSpherePoint*)malloc(n * sizeof(MCSpherePoint));
+        if(TempPointArray == NULL)
+        {
+            std::cout << "Memory not allocated" << std::endl;
+            return nullptr;
+        }
+        std::random_device RandDev;
+        std::mt19937 Generator(RandDev());
+        std::uniform_real_distribution<double> distPhi(0,1); //multiply by 2pi;
+        std::uniform_real_distribution<double> distTheta(-1,1); //get acos of value between -1 and 1
+        std::uniform_real_distribution<double> distR(0,1); //multiply by rmax
+        for(int i = 0; i < n; i++)
+        {
+            double phi = 2.0 * M_PI * distPhi(Generator);
+            double theta = std::acos(distTheta(Generator));
+            double r = rmax * distR(Generator);
+            TempPointArray[i] = {theta,phi,r};
+        }
+        return TempPointArray;
+    }
+
+    bool RetrieveMCPoint(std::array<double, 3> &arr, MCSpherePoint *ptr, int num)
+    {
+        MCSpherePoint p = ptr[num];
+        
+        double theta = p.theta;
+        double phi = p.phi;
+        double r = p.r;
+
+        double x = r * std::sin(theta) * std::cos(phi);
+        double y = r * std::sin(theta) * std::sin(phi);
+        double z = r * std::cos(theta);
+
+        arr = {x,y,z};
         return true;
     }
 

@@ -1440,13 +1440,11 @@ namespace SpinAPI
 		for(auto f = Fields.begin(); f != Fields.end(); f++)
 		{
  			auto [a,n,sn] = (*f);
-			int N = n * ori;
-			//int N = n;
+			//int N = n * ori;
+			int N = n;
 			for(int i = 0; i < N; i++)
 			{
 				double bondlength = a * std::sqrt(sn * (sn+1));
-				//for(int e = 0; e < ori; e++)
-				//	BondLengths.push_back(bondlength);
 				BondLengths.push_back(bondlength);
 				tau_sum.push_back(std::pow(bondlength,2));
 			}
