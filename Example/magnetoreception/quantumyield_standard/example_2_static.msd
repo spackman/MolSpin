@@ -100,7 +100,7 @@ SpinSystem system1
 		type = semiclassicalfield;
 		group1 = RPElectron1;
 		HyperfineField = "(0.22,2,0.5),(0.3,5,1)";
-		orientations = 10;
+		orientations = 100;
 	}
 
 	Interaction test2
@@ -108,7 +108,7 @@ SpinSystem system1
 		type = semiclassicalfield;
 		group1 = RPElectron2;
 		HyperfineField = "(0.5,2,0.5),(0.15,5,1)";
-		orientations = 10;
+		orientations = 100;
 	}
 
 	//interaction test3

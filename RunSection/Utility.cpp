@@ -141,7 +141,7 @@ namespace RunSection
                 int row = e * Dimension;
 
                 arma::sp_cx_mat sample = HSC[i].submat(row, col, row + Dimension - 1, col + Dimension -1);
-                H.submat(i * Dimension, i * Dimension, (i+1)*Dimension -1, (i+1)*Dimension -1) += sample;
+                H.submat(i * Dimension, i * Dimension, (i+1)*Dimension -1, (i+1)*Dimension -1) += arma::cx_double(0.0,-1.0) * sample;
            } 
         }
         return H;
@@ -208,11 +208,11 @@ namespace RunSection
                 }
             }
 
-            for(unsigned int e = 0; e < Combination.size(); e++)
-            {
-                std::cout << Combination[e] << ",";
-            }
-            std::cout << std::endl;
+            //for(unsigned int e = 0; e < Combination.size(); e++)
+            //{
+            //    std::cout << Combination[e] << ",";
+            //}
+            //std::cout << std::endl;
 
             int s = 0;
             SampleCombination s1;

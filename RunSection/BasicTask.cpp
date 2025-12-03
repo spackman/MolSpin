@@ -302,11 +302,11 @@ namespace RunSection
 		GetSamples(As,A, SysData, SampleWeights, AllWeights);
 		this->Log() << "Ready to perform calculation." << std::endl;
 		
-		#pragma omp parallel for
+		//#pragma omp parallel for
 		for (unsigned int i = 0; i < As.size(); i++)
 		{
-			arma::cx_vec result = solve(arma::conv_to<arma::cx_mat>::from(As[i]), rho0vec);
-			//std::cout << "Sample " << i << " trace: " << arma::trace(arma::reshape(result, std::sqrt(result.n_rows), std::sqrt(result.n_rows))) << std::endl;
+			arma::cx_vec result = -1 * solve(arma::conv_to<arma::cx_mat>::from(As[i]), rho0vec);
+			std::cout << "Sample " << i << " trace: " << arma::trace(arma::reshape(result, std::sqrt(result.n_rows), std::sqrt(result.n_rows))) << std::endl;
 			std::vector<double> weights = SampleWeights[i];
 			double weight_product = 1.0;
 			for(unsigned int j = 0; j < weights.size(); j++)
@@ -314,7 +314,7 @@ namespace RunSection
 				result *= weights[j];
 				weight_product *= weights[j];
 			}
-			#pragma omp critical
+			//#pragma omp critical
 			{
 				SCresults.push_back({i,result});
 				SCweights.push_back({i,weight_product});
