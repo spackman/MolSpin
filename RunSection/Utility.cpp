@@ -108,10 +108,10 @@ namespace RunSection
         SCData container;
         arma::sp_cx_mat H = CompositeMatrix.submat(0,0,Dimension-1,Dimension-1);
         arma::sp_cx_mat SampleMatrix = CompositeMatrix.submat(Dimension,0,CompositeMatrix.n_rows-1,CompositeMatrix.n_cols-1);
-        for (int i = 0; i < CompositeMatrix.n_rows - Dimension; i += Dimension)
+        for (unsigned int i = 0; i < CompositeMatrix.n_rows - Dimension; i += Dimension)
         {
             int samples = 0;
-            for (int e = 0; e < CompositeMatrix.n_cols; e+= Dimension)
+            for (unsigned int e = 0; e < CompositeMatrix.n_cols; e+= Dimension)
             {
                 arma::sp_cx_mat SubMat = SampleMatrix.submat(i,e,i+Dimension-1,e+Dimension-1);
                 if(SubMat.n_nonzero == 0)
@@ -154,11 +154,11 @@ namespace RunSection
         std::vector<int> NumInteractionsPerSpinSystem;
         std::vector<SampleCombination> samples;
         int samplelength = 0;
-        for(int i = 0; i < orientations.size(); i++)
+        for(unsigned int i = 0; i < orientations.size(); i++)
         {
             samplelength += orientations[i].size();
             NumInteractionsPerSpinSystem.push_back(orientations[i].size());
-            for(int e = 0; e < orientations[i].size(); e++)
+            for(unsigned int e = 0; e < orientations[i].size(); e++)
             {
                 steps.push_back(orientations[i][e]);
                 num = num * steps[samplelength-orientations[i].size()+e];
@@ -208,7 +208,7 @@ namespace RunSection
                 }
             }
 
-            for(int e = 0; e < Combination.size(); e++)
+            for(unsigned int e = 0; e < Combination.size(); e++)
             {
                 std::cout << Combination[e] << ",";
             }
@@ -216,7 +216,7 @@ namespace RunSection
 
             int s = 0;
             SampleCombination s1;
-            for(int a = 0; a < NumInteractionsPerSpinSystem.size(); a++)
+            for(unsigned int a = 0; a < NumInteractionsPerSpinSystem.size(); a++)
             {
                 std::vector<int> temp;
                 for(int e = 0; e < NumInteractionsPerSpinSystem[a]; e++)

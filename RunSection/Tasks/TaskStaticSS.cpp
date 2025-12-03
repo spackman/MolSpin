@@ -206,73 +206,18 @@ namespace RunSection
 			// Perform the calculation
 
 			//code needed for the semi-classical interaction
-			bool SC = false;
-			std::vector<std::pair<int,arma::cx_vec>> SCresults;
-			std::vector<std::pair<int,double>> SCweights;
-			std::vector<arma::sp_cx_mat> As;
-			std::vector<std::vector<std::vector<double>>> AllWeights = {{}};
-			std::pair<std::vector<double>,std::vector<int>> BLandSamples;
-			std::vector<std::vector<double>> SampleSpacing;
-			std::vector<std::vector<double>> SampleWeights;
-			{
-				for(auto e = (*i)->interactions_cbegin(); e != (*i)->interactions_cend(); e++)
-				{
-					if((*e)->Type() == SpinAPI::InteractionType::SemiClassicalField)
-					{
-						AllWeights[0].push_back((*e)->GetOriWeights());
-						std::vector<double> BL = (*e)->VL();
-						double BMax = std::reduce(BL.begin(), BL.end());
-						BLandSamples.first.push_back(BMax);
-						BLandSamples.second.push_back((*e)->Orientations());
-						SampleSpacing.push_back((*e)->GetSpacing());
-					}
-				}
-			}	
+			bool SC = false;	
+			arma::cx_vec result;
 			if(DataStruct.SamplesMatrix.n_nonzero != 0)
 			{
 				SC = true;
-				std::vector<SCData> SysData = {DataStruct};
-				GetSamples(As,A,SysData, SampleWeights, AllWeights);
 			}
-
-			this->Log() << "Ready to perform calculation." << std::endl;
-
 			if(SC)
 			{
-				#pragma omp parallel for
-				for (int i = 0; i < As.size(); i++)
-				{
-					arma::cx_vec result = solve(arma::conv_to<arma::cx_mat>::from(As[i]), rho0vec);
-					std::cout << "Sample " << i << " trace: " << arma::trace(arma::reshape(result, std::sqrt(result.n_rows), std::sqrt(result.n_rows))) << std::endl;
-					std::vector<double> weights = SampleWeights[i];
-					double weight_product = 1.0;
-					for(int j = 0; j < weights.size(); j++)
-					{
-						result *= weights[j];
-						weight_product *= weights[j];
-					}
-					#pragma omp critical
-					{
-						SCresults.push_back({i,result});
-						SCweights.push_back({i,weight_product});
-					}
-				}
+				SpinAPI::system_ptr ptr = (*i);
+				SCDirectEvaluation(ptr, A, DataStruct, rho0vec, result);
+				std::cout << "Trace of final result: " << arma::trace(arma::reshape(result, std::sqrt(result.n_rows), std::sqrt(result.n_rows))) << std::endl;
 			}
-			std::pair<arma::cx_vec, double> results = IntegrateSC(SCresults, SCweights, SCIntegrationProperties{BLandSamples.first, BLandSamples.second, SampleSpacing});
-			//sum up the rhoSCresults
-			arma::cx_vec result = arma::zeros<arma::cx_vec>(rho0vec.n_rows);
-			result = results.first;
-			//if(SC)
-			//{
-			//	for(int i = 0; i < SCresults.size(); i++)
-			//	{
-			//		result += SCresults[i].second;
-			//	}
-			//}
-
-			std::cout << "Trace of final result: " << arma::trace(arma::reshape(result, std::sqrt(result.n_rows), std::sqrt(result.n_rows))) << std::endl;
-			
-
 			
 			arma::cx_vec result2 = solve(arma::conv_to<arma::cx_mat>::from(A), rho0vec);
 			this->Log() << "Done with calculation." << std::endl;

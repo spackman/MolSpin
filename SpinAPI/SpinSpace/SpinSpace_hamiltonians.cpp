@@ -530,9 +530,6 @@ namespace SpinAPI
 			std::vector<SCHyperfineField> hf = _interaction->Hfiamplitude();
 			std::vector<double> B = _interaction->VL();
 			double BMax = std::reduce(B.begin(),B.end());
-			//double A = std::accumulate(hf.begin(), hf.end(), 0, [](double sum, SCHyperfineField b) {
-			//	return sum + std::get<0>(b);
-			//});
 
 			// Build Sx, Sy, Sz for *each* electron in Group1
 			arma::sp_cx_mat Sx;
@@ -576,7 +573,7 @@ namespace SpinAPI
 					{
 						r = -r;
 					}
-					double sampleweight = _interaction->f({x,y,z});
+					double sampleweight = _interaction->f({x,y,z}); //distribution funcition ptr
 					weights.push_back({{{x,y,z},r},sampleweight});
 				}
 				
@@ -631,15 +628,17 @@ namespace SpinAPI
 						spacingcheck.push_back(std::abs(weights[k+1].first.second - weights[k].first.second));
 					spacing.push_back(weights[k].first.second);
 				}
+				//get the normalization factor
 				for (int k = 0; k < weights.size()-1; k++)
 				{
 					double t = weights[k].second+ weights[k+1].second;
 					area += (0.5*t) * spacingcheck[k];
 				}
+				//normalise the weights
 				std::vector<double> weights_final;
 				for (auto &weight : weights)
 				{
-					weights_final.push_back(weight.second);
+					weights_final.push_back(weight.second/area);
 				}
 				_interaction->GetOriWeights() = weights_final;
 				_interaction->GetSpacing() = spacing;

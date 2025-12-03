@@ -273,6 +273,59 @@ namespace RunSection
 		}
     }
 
+    void BasicTask::SCDirectEvaluation(SpinAPI::system_ptr& i, arma::sp_cx_mat& A, SCData& Data, arma::cx_vec& rho0vec, arma::cx_vec &ReturnVec)
+    {
+
+		std::vector<std::pair<int,arma::cx_vec>> SCresults;
+		std::vector<std::pair<int,double>> SCweights;
+		std::vector<arma::sp_cx_mat> As;
+		std::vector<std::vector<std::vector<double>>> AllWeights = {{}};
+		std::pair<std::vector<double>,std::vector<int>> BLandSamples;
+		std::vector<std::vector<double>> SampleSpacing;
+		std::vector<std::vector<double>> SampleWeights;
+
+		{
+			for(auto e = i->interactions_cbegin(); e != i->interactions_cend(); e++)
+			{
+				if((*e)->Type() == SpinAPI::InteractionType::SemiClassicalField)
+				{
+					AllWeights[0].push_back((*e)->GetOriWeights());
+					std::vector<double> BL = (*e)->VL();
+					double BMax = std::reduce(BL.begin(), BL.end());
+					BLandSamples.first.push_back(BMax);
+					BLandSamples.second.push_back((*e)->Orientations());
+					SampleSpacing.push_back((*e)->GetSpacing());
+				}
+			}
+		}
+		std::vector<SCData> SysData= {Data};
+		GetSamples(As,A, SysData, SampleWeights, AllWeights);
+		this->Log() << "Ready to perform calculation." << std::endl;
+		
+		#pragma omp parallel for
+		for (unsigned int i = 0; i < As.size(); i++)
+		{
+			arma::cx_vec result = solve(arma::conv_to<arma::cx_mat>::from(As[i]), rho0vec);
+			//std::cout << "Sample " << i << " trace: " << arma::trace(arma::reshape(result, std::sqrt(result.n_rows), std::sqrt(result.n_rows))) << std::endl;
+			std::vector<double> weights = SampleWeights[i];
+			double weight_product = 1.0;
+			for(unsigned int j = 0; j < weights.size(); j++)
+			{
+				result *= weights[j];
+				weight_product *= weights[j];
+			}
+			#pragma omp critical
+			{
+				SCresults.push_back({i,result});
+				SCweights.push_back({i,weight_product});
+			}
+		}
+		std::pair<arma::cx_vec, double> results = IntegrateSC(SCresults, SCweights, SCIntegrationProperties{BLandSamples.first, BLandSamples.second, SampleSpacing});
+		arma::cx_vec result = arma::zeros<arma::cx_vec>(rho0vec.n_rows);
+		result = results.first;
+		ReturnVec = result;		
+    }
+
     std::pair<arma::cx_vec,double> BasicTask::IntegrateSC(std::vector<std::pair<int,arma::cx_vec>>& rhoSC, std::vector<std::pair<int,double>>& rhoweights, SCIntegrationProperties props)
     {
 		auto SCresultsSort = [](const std::pair<int,arma::cx_vec> &a, const std::pair<int,arma::cx_vec> &b) {
@@ -290,10 +343,9 @@ namespace RunSection
 		std::vector<std::vector<double>> stepsizes; 
 		for(int i = 0; i < dimensions; i++)
 		{
-			//stepsizes.push_back(2*props.maxBondLenght[i]/(double)props.numSamples[i]);
 			stepsizes.push_back(props.spacing[i]);
 		}
-		std::vector<double> slice; //will be 1d in the first loop, 2d in the second etc
+		std::vector<double> slice;
 		std::vector<arma::cx_vec> sliceV;
 
 		struct Trapezium
@@ -349,6 +401,7 @@ namespace RunSection
 			trapezia.push_back(t);
 		}
 
+		//evaluates the 2d trapezia
 		int samplesize = props.numSamples[props.numSamples.size() - 1] - 1;
 		auto Eval = [](std::vector<Trapezium>& trapezia, int dim, int samplesize) {
 			double area = trapezia[0].value;
@@ -380,17 +433,10 @@ namespace RunSection
 		trapezia = NewTrapezia;
 		NewTrapezia.clear();
 
-
-		auto GetSkip = [&](int dim) {
-			int divider = 1;
-			for(int d = 0; d <= dimensions-dim-1; d++)
-			{
-				divider *= props.numSamples[d];
-			}
-			return trapezia.size() / divider;
-		};
-
-
+		//recursive function that evaluates the integral for n dimensions (starts at the 2nd dimension)
+		//each loop creates new sets of "trapezia" so each dimension can be treated as having 1d integration.
+		//recursivly goes down until theres one dimension to work and the the "trapezia" it calculates is then propogated back up the stack
+		//New trapezia should have a length of one by the end of the last loop
 		std::function<std::vector<Trapezium>(std::vector<Trapezium>, std::vector<int>)> Eval2;
 		int depth = 0;
 		Eval2 = [&depth, &Eval2, &stepsizes, &result](std::vector<Trapezium> trapezia, std::vector<int> samples) {
@@ -440,7 +486,6 @@ namespace RunSection
 			return NewTrapezia;
 		};
 
-		int numTrapezia = trapezia.size();
 		std::vector<int> NumOfTrapezia = {};
 		for(int i = 1; i < dimensions; i++)
 		{
@@ -458,15 +503,15 @@ namespace RunSection
 			totalIntegral += t.value;
 			totalVec += t.VectorValue;
 			index += 1;
-			if(totalIntegral < tot)
-			{
-				std::cin.get();
-			}
+
+			//if(totalIntegral < tot)
+			//{
+			//	std::cin.get();
+			//}
 			tot = totalIntegral;
 		}
-
-		std::cout << totalIntegral << std::endl;
-		std::cout << totalVec << std::endl;
+			//std::cout << totalIntegral << std::endl;
+			//std::cout << totalVec << std::endl;
 
 		return {totalVec,totalIntegral};
 

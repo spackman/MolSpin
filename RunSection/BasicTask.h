@@ -83,6 +83,8 @@ namespace RunSection
 		
 		//semi classical 
 		virtual void GetSamples(std::vector<arma::sp_cx_mat>&, arma::sp_cx_mat& A, std::vector<SCData>&, std::vector<std::vector<double>>&, std::vector<std::vector<std::vector<double>>>&);
+		virtual void SCDirectEvaluation(SpinAPI::system_ptr&, arma::sp_cx_mat&, SCData&, arma::cx_vec&, arma::cx_vec&);
+		//virtual void SCTimeIntegration() need to implement 
 
 		struct SCIntegrationProperties
 		{

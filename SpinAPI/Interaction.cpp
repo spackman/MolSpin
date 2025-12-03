@@ -123,7 +123,7 @@ namespace SpinAPI
 							InTuple = true;
 							continue;
 						}
-						CurrentString == "";
+						CurrentString = "";
 						if(!InTuple && element < 3)
 						{
 							std::cout << "[INFO]: Not enough elements in hyperfine field definition for the semi classical interaction." << this->Name();
