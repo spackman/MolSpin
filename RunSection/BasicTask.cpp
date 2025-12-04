@@ -19,6 +19,10 @@
 #include "Transition.h"
 #include "SpinSystem.h"
 
+// #ifdef USE_OPENBLAS
+extern "C" void openblas_set_num_threads(int);
+// #endif
+
 namespace RunSection
 {
 
@@ -303,6 +307,8 @@ namespace RunSection
 		this->Log() << "Ready to perform calculation." << std::endl;
 		
 		//#pragma omp parallel for
+		openblas_set_num_threads(1);
+		#pragma omp parallel for
 		for (unsigned int i = 0; i < As.size(); i++)
 		{
 			arma::cx_vec result = -1 * solve(arma::conv_to<arma::cx_mat>::from(As[i]), rho0vec);
@@ -314,7 +320,7 @@ namespace RunSection
 				result *= weights[j];
 				weight_product *= weights[j];
 			}
-			//#pragma omp critical
+			#pragma omp critical
 			{
 				SCresults.push_back({i,result});
 				SCweights.push_back({i,weight_product});
@@ -324,6 +330,126 @@ namespace RunSection
 		arma::cx_vec result = arma::zeros<arma::cx_vec>(rho0vec.n_rows);
 		result = results.first;
 		ReturnVec = result;		
+    }
+
+    void BasicTask::SCTimeIntegration(SpinAPI::system_ptr& i, arma::sp_cx_mat& A, SCData& Data, arma::cx_vec& rho0vec, arma::cx_vec &ReturnVec, TimeEvoProperties& prop)
+    {
+		std::vector<std::pair<int,arma::cx_vec>> SCresults;
+		std::vector<std::pair<int,double>> SCweights;
+		std::vector<arma::sp_cx_mat> As;
+		std::vector<std::vector<std::vector<double>>> AllWeights = {{}};
+		std::pair<std::vector<double>,std::vector<int>> BLandSamples;
+		std::vector<std::vector<double>> SampleSpacing;
+		std::vector<std::vector<double>> SampleWeights;
+		std::vector<std::pair<int,double>> rho0s;
+
+		{
+			for(auto e = i->interactions_cbegin(); e != i->interactions_cend(); e++)
+			{
+				if((*e)->Type() == SpinAPI::InteractionType::SemiClassicalField)
+				{
+					AllWeights[0].push_back((*e)->GetOriWeights());
+					std::vector<double> BL = (*e)->VL();
+					double BMax = std::reduce(BL.begin(), BL.end());
+					BLandSamples.first.push_back(BMax);
+					BLandSamples.second.push_back((*e)->Orientations());
+					SampleSpacing.push_back((*e)->GetSpacing());
+				}
+			}
+		}
+		std::vector<SCData> SysData= {Data};
+		GetSamples(As,A, SysData, SampleWeights, AllWeights);
+
+		// Output results at the initial step (before calculations)
+		this->Data() << this->RunSettings()->CurrentStep() << " 0 "; // "0" refers to the time
+		this->WriteStandardOutput(this->Data());
+		
+		arma::cx_mat PState;
+		auto states = (*i)->States();
+		for (auto j = states.cbegin(); j != states.cend(); j++)
+		{
+			if (!spaces[ic].GetState((*j), PState))
+			{
+				this->Log() << "Failed to obtain projection matrix onto state \"" << (*j)->Name() << "\" of SpinSystem \"" << (*i)->Name() << "\"." << std::endl;
+				continue;
+			}
+			this->Data() << std::abs(arma::trace(PState * rho0vec)) << " ";
+		}
+		this->Data() << std::endl;
+
+		arma::cx_vec result = arma::cx_vec(rho0vec.n_rows);
+		double CurrentTime = 0.0;
+		bool NoFail = false;
+		if(prop.prop == Propagator::exp || prop.prop == Propagator::Default)
+		{
+			std::vector<std::pair<double,arma::cx_mat>> exp_prop;
+			openblas_set_num_threads(1);
+			this->Log() << "Using exponential propogator" << std::endl;
+			this->Log() << "Calculating the propagator..." << std::endl;
+			#pragma omp parallel for
+			for (unsigned int i = 0; i < As.size(); i++)
+			{
+				arma::cx_mat P = arma::expmat(arma::conv_to<arma::cx_mat>::from(As[i]) * prop.TimeStep);
+				std::vector<double> weights = SampleWeights[i];
+				double weight_product = 1.0;
+				for(unsigned int j = 0; j < weights.size(); j++)
+				{
+					weight_product *= weights[j];
+				}
+				#pragma omp critical
+				{
+					exp_prop.push_back({i,P});
+					SCweights.push_back({i,weight_product});
+					rho0s.push_back({i,rho0vec});
+				}
+			}
+
+			this->Log() << "Ready to perform calculation." << std::endl;
+			unsigned int steps = static_cast<unsigned int>(std::abs(prop.TotalTIme/prop.TimeStep));
+			for(unsigned int n = 1; n < steps; n++)
+			{
+				this->Data() << this->RunSettings()->CurrentStep() << " ";
+				CurrentTime += this->timestep;
+				this->Data() << CurrentTime << " ";
+				this->WriteStandardOutput(this->Data());
+				// Propagate (use special scope to be able to dispose of the temporary vector asap)
+				arma::cx_vec result = arma::zeros<arma::cx_vec>(rho0vec.n_rows);
+				{
+					SCresults.clear();
+					#pragma omp parallel for
+					for(unsigned int i = 0; i < exp_prop.size(); i++)
+					{
+						arma::cx_vec tmp = exp_prop[i].second * rho0s[i].second;
+						#pragma omp critical
+						{
+							SCresults.push_back({exp_prop[i].first, tmp});
+						}
+						rho0s[i] = {i,tmp};
+					}
+					std::pair<arma::cx_vec, double> results = IntegrateSC(SCresults, SCweights, SCIntegrationProperties{BLandSamples.first, BLandSamples.second, SampleSpacing});
+					result = results.first;
+				}
+
+				arma::cx_mat PState;
+				rho0vec = result;
+				auto states = (*i)->States();
+				for (auto j = states.cbegin(); j != states.cend(); j++)
+				{
+					if (!spaces[ic].GetState((*j), PState))
+					{
+						this->Log() << "Failed to obtain projection matrix onto state \"" << (*j)->Name() << "\" of SpinSystem \"" << (*i)->Name() << "\"." << std::endl;
+						continue;
+					}
+					this->Data() << std::abs(arma::trace(PState * rho0vec)) << " ";
+				}
+				this->Data() << std::endl;
+			}
+			this->Log() << "\nDone with calculations!" << std::endl;
+			return true;
+		}
+		return true;
+	}
+
     }
 
     std::pair<arma::cx_vec,double> BasicTask::IntegrateSC(std::vector<std::pair<int,arma::cx_vec>>& rhoSC, std::vector<std::pair<int,double>>& rhoweights, SCIntegrationProperties props)

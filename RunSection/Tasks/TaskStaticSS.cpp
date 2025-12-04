@@ -216,10 +216,14 @@ namespace RunSection
 			{
 				SpinAPI::system_ptr ptr = (*i);
 				SCDirectEvaluation(ptr, A, DataStruct, rho0vec, result);
-				std::cout << "Trace of final result: " << arma::trace(arma::reshape(result, std::sqrt(result.n_rows), std::sqrt(result.n_rows))) << std::endl;
+			}
+			else
+			{
+				result = -1 * solve(arma::conv_to<arma::cx_mat>::from(A), rho0vec);
 			}
 			
 			//arma::cx_vec result2 = solve(arma::conv_to<arma::cx_mat>::from(A), rho0vec);
+			std::cout << "Trace of final result: " << arma::trace(arma::reshape(result, std::sqrt(result.n_rows), std::sqrt(result.n_rows))) << std::endl;
 			this->Log() << "Done with calculation." << std::endl;
 
 			std::cout << result << std::endl;
