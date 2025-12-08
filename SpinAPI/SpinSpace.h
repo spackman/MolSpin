@@ -19,6 +19,7 @@
 // (c) 2019 Quantum Biology and Computational Physics Group.
 // See LICENSE.txt for license information.
 /////////////////////////////////////////////////////////////////////////
+
 #ifndef MOD_SpinAPI_SpinSpace
 #define MOD_SpinAPI_SpinSpace
 
