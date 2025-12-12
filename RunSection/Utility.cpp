@@ -9,6 +9,7 @@
 
 #include "Utility.h"
 #include <random>
+#include <thread>
 
 namespace RunSection
 {
@@ -342,7 +343,13 @@ namespace RunSection
         drhodt = RK4;
         return NewStepSize;
     }
-  
+
+    unsigned int GetNumThreads()
+    {
+        auto processor_count = std::thread::hardware_concurrency();
+        return processor_count;
+    }
+
     arma::cx_vec ThomasBlockSolver(arma::sp_cx_mat &A, arma::cx_vec &b, int block_size, std::vector<arma::sp_cx_mat>CachedBlocks)
     {
         int n_blocks = A.n_rows / block_size; //the total number of blocks in the matrix (including those that are zero)

@@ -667,7 +667,6 @@ namespace SpinAPI
 			arma::sp_cx_mat lhs;
 			arma::sp_cx_mat rhs;
 			int submats = tmp.n_cols / this->HilbertSpaceDimensions();
-			std::cout << submats << std::endl;
 			int superoperatorspace = this->HilbertSpaceDimensions() * this->HilbertSpaceDimensions();
 			_out = arma::zeros<arma::sp_cx_mat>(superoperatorspace, submats * superoperatorspace);
 			for (int i = 0; i < submats; i++)
@@ -783,6 +782,10 @@ namespace SpinAPI
 		Block1w = result.n_cols;
 		_out = arma::sp_cx_mat(Block1h+height, (width > Block1w) ? width : Block1w);
 		_out.submat(0,0,Block1h-1,Block1w -1) = result;
+		if(result.is_hermitian() == false)
+		{
+			std::cin.get();
+		}
 		if(SCout.n_nonzero != 0)
 			_out.submat(Block1h, 0, Block1h+height-1,width-1) = SCout;
 		return true;

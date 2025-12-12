@@ -80,6 +80,7 @@ namespace RunSection
     double RungeKutta45Armadillo(arma::sp_cx_mat &, arma::cx_vec &, arma::cx_vec &, double, RungeKuttaFuncArma, std::pair<double, double>, double MinTimeStep = 1e-6, double MaxTimeStep = 1e6, double time = 0);
 
 #pragma endregion 
+    unsigned int GetNumThreads();
 
 #pragma region BlockMatrixInversionSolvers
     //With these solvers there is the potential for a large amount of matrix fill-in during the solution process.

@@ -218,11 +218,15 @@ namespace RunSection
 				SC = true;
 			}
 
+
 			if(!SC)
 			{
 				P[ic] = std::pair<arma::cx_mat, arma::cx_vec>(arma::expmat(arma::conv_to<arma::cx_mat>::from(A) * this->timestep), rho0vec);
 			}
-			P[ic] = std::pair<arma::cx_mat, arma::cx_vec>(arma::conv_to<arma::cx_mat>::from(A),rho0vec);
+			else
+			{
+				P[ic] = std::pair<arma::cx_mat, arma::cx_vec>(arma::conv_to<arma::cx_mat>::from(A),rho0vec);
+			}
 			SWdata[ic] = DataStruct;
 			SW[ic] = SC;
 			++ic;
@@ -310,11 +314,21 @@ namespace RunSection
 				openblas_set_num_threads(1);
 				this->Log() << "Using exponential propogator" << std::endl;
 				this->Log() << "Calculating the propagator..." << std::endl;
-				#pragma omp parallel for
-				for (unsigned int i = 0; i < As[ic].size(); i++)
+				arma::cx_mat temp_mat;
+				arma::cx_vec temp_vec;
+				for (unsigned int e = 0; e < As[ic].size(); e++)
 				{
-					arma::cx_mat P = arma::expmat(arma::conv_to<arma::cx_mat>::from(As[ic][i]) * this->timestep);
-					std::vector<double> weights = SampleWeights[ic][i];
+					exp_prop.push_back({0,temp_mat});
+					SCweights[ic].push_back({0,0.0});
+					rho0s[ic].push_back({e,temp_vec});
+				}
+				unsigned int threads = GetNumThreads();
+				//threads = (unsigned int)std::floor((double)threads / 2.0);
+				#pragma omp parallel for num_threads(threads)
+				for (unsigned int e = 0; e < As[ic].size(); e++)
+				{
+					arma::cx_mat expP = arma::expmat(arma::conv_to<arma::cx_mat>::from(As[ic][e]) * this->timestep);
+					std::vector<double> weights = SampleWeights[ic][e];
 					double weight_product = 1.0;
 					for(unsigned int j = 0; j < weights.size(); j++)
 					{
@@ -322,9 +336,9 @@ namespace RunSection
 					}
 					#pragma omp critical
 					{
-						exp_prop.push_back({i,P});
-						SCweights[ic].push_back({i,weight_product});
-						rho0s[ic].push_back({i,rho0vec});
+						exp_prop[e] = {e,expP};
+						SCweights[ic][e] = {e,weight_product};
+						rho0s[ic][e] = {e,P[ic].second};
 					}
 				}
 				Propagators.push_back(exp_prop);
@@ -352,23 +366,24 @@ namespace RunSection
 				{
 					SCresults[ic].clear();
 					#pragma omp parallel for
-					for(unsigned int i = 0; i < Propagators[ic].size(); i++)
+					for(unsigned int e = 0; e < Propagators[ic].size(); e++)
 					{
-						arma::cx_vec tmp = Propagators[ic][i].second * rho0s[ic][i].second;
+						arma::cx_vec tmp = Propagators[ic][e].second * rho0s[ic][e].second;
 						#pragma omp critical
 						{
-							SCresults[ic].push_back({Propagators[ic][i].first, tmp});
+							SCresults[ic].push_back({Propagators[ic][e].first, tmp * SCweights[ic][e].second});
+							//SCresults[ic].push_back({e, tmp * SCweights[ic][e].second});
+							//std::cout << arma::trace(tmp) << std::endl;
 						}
-						rho0s[ic][i] = {Propagators[ic][i].first,tmp};
+						rho0s[ic][e] = {Propagators[ic][e].first,tmp};
 					}
 					std::pair<arma::cx_vec, double> results = IntegrateSC(SCresults[ic], SCweights[ic], SCIntegrationProperties{BLandSamples[ic].first, BLandSamples[ic].second, SampleSpacing[ic]});
 					result = results.first;
-					std::cout << results.second << std::endl;
 					P[ic].second = result;
 				}
 				else
 				{
-					result = P[ic].first * P[ic].second;
+					result = Propagators[ic][0].second * P[ic].second;
 					P[ic].second = result;
 				}
 				

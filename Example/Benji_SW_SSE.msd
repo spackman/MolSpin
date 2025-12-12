@@ -28,6 +28,66 @@ SpinSystem RPSystem
 		tensor = matrix("0.0005 0.0 0.0;0.0 0.0005 0.0;0.0 0.0 0.0005");
 		spin = 1/2;
 	}
+	Spin FH1
+	{
+		tensor = matrix("0.0004 0.0 0.0;0.0 0.0004 0.0;0.0 0.0 0.0004");
+		spin = 1/2;
+	}
+	Spin WH1
+	{
+		tensor = matrix("0.0004 0.0 0.0;0.0 0.0004 0.0;0.0 0.0 0.0004");
+		spin = 1/2;
+	}
+	Spin FH2
+	{
+		tensor = matrix("0.0002 0.0 0.0;0.0 0.0002 0.0;0.0 0.0 0.0002");
+		spin = 1/2;
+	}
+	Spin WH2
+	{
+		tensor = matrix("0.0002 0.0 0.0;0.0 0.0002 0.0;0.0 0.0 0.0002");
+		spin = 1/2;
+	}
+	Spin FH3
+	{
+		tensor = matrix("0.0002 0.0 0.0;0.0 0.0002 0.0;0.0 0.0 0.0002");
+		spin = 1/2;
+	}
+	Spin WH3
+	{
+		tensor = matrix("0.0002 0.0 0.0;0.0 0.0002 0.0;0.0 0.0 0.0002");
+		spin = 1/2;
+	}
+	Spin FH4
+	{
+		tensor = matrix("1e-05 0.0 0.0;0.0 1e-05 0.0;0.0 0.0 1e-05");
+		spin = 1/2;
+	}
+	Spin WH4
+	{
+		tensor = matrix("1e-05 0.0 0.0;0.0 1e-05 0.0;0.0 0.0 1e-05");
+		spin = 1/2;
+	}
+	Spin FH5
+	{
+		tensor = matrix("1e-05 0.0 0.0;0.0 1e-05 0.0;0.0 0.0 1e-05");
+		spin = 1/2;
+	}
+	Spin WH5
+	{
+		tensor = matrix("1e-05 0.0 0.0;0.0 1e-05 0.0;0.0 0.0 1e-05");
+		spin = 1/2;
+	}
+	Spin FH6
+	{
+		tensor = matrix("1e-05 0.0 0.0;0.0 1e-05 0.0;0.0 0.0 1e-05");
+		spin = 1/2;
+	}
+	Spin WH6
+	{
+		tensor = matrix("1e-05 0.0 0.0;0.0 1e-05 0.0;0.0 0.0 1e-05");
+		spin = 1/2;
+	}
 
 	// ---------------------------------------------------------
 	// Interactions
@@ -43,31 +103,14 @@ SpinSystem RPSystem
 	{
 		type = hyperfine;
 		group1 = RPElectron1;
-		group2 = FN1;
+		group2 = FN1,FH1,FH2,FH3,FH4,FH5,FH6;
 	}
  	Interaction radical2hyperfine
 	{
 		type = hyperfine;
 		group1 = RPElectron2;
-		group2 = WN1;
+		group2 = WN1,WH1,WH2,WH3,WH4,WH5,WH6;
 	}
-
-	Interaction radical1SemiClassical
-	{
-		type = semiclassicalfield;
-		group1 = RPElectron1;
-		HyperfineField = "(0.0004,1,0.5),(0.0002,2,0.5),(1e-05,3,0.5)";
-		orientations = 100;
-	}
-	
-	Interaction radical2SemiClassical
-	{
-		type = semiclassicalfield;
-		group1 = RPElectron2;
-		HyperfineField = "(0.0004,1,0.5),(0.0002,2,0.5),(1e-05,3,0.5)";
-		orientations = 100;
-	}
-
  
 	// ---------------------------------------------------------
 
@@ -118,41 +161,36 @@ SpinSystem RPSystem
 	{
 		type = sink;
 		source = Singlet;	// spin-independent reaction
-		rate = 0.001;
+		rate = 0.00;
 
 	}
 		Transition Product2
 	{
 		type = sink;
 		source = T0;	// spin-independent reaction
-		rate = 0.001;
+		rate = 0.00;
 
 	}
 	Transition Product3
 	{
 		type = sink;
 		source = Tp;	// spin-independent reaction
-		rate = 0.001;
+		rate = 0.00;
 
 	}
 	Transition Product4
 	{
 		type = sink;
 		source = Tm;	// spin-independent reaction
-		rate = 0.001;
+		rate = 0.00;
 
 	}
 	Transition Product_identity
 	{
 		type = sink;
 		source = Identity;	// spin-independent reaction
-		rate = 0.001;
+		rate = 0.00;
 
-	}
-
-	Properties Properties
-	{
-		initialstate = Singlet;
 	}
 }
 Settings
@@ -187,11 +225,20 @@ Run
 {
 	Task main
 	{
-		type = StaticSS-timeevolution;
-		logfile = "Benji_SWDCTE_logfile2.txt";
-		datafile = "Benji_SWDCTE_result2.dat";
-		transitionyields = true;
-		totaltime = 12000;
-		timestep = 10;
+		type = statichs-stoch-timeevo;
+		logfile = "SSE_logfile.txt";
+		datafile = "SSE_result.dat";
+		transitionyields = false;
+		initialstate = Singlet;
+		sampligmethod = "SUZ";
+		propagationmethod = "autoexpm";
+		precision = "double";
+		yieldcorrections = false;
+		montecarlosamples = 3;
+		totaltime = 6000;
+		timestep = 1;
+		autoseed = false;
+		seed = 66904056;
+
 	}
 }
