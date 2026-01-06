@@ -9,6 +9,8 @@
 #ifndef MOD_RunSection_TaskStaticHSDirectSpectra
 #define MOD_RunSection_TaskStaticHSDirectSpectra
 
+#include <armadillo>
+#include <tuple>
 #include "BasicTask.h"
 #include "SpinAPIDefines.h"
 
@@ -24,6 +26,8 @@ namespace RunSection
 		SpinAPI::ReactionOperatorType reactionOperators;
 
 		void WriteHeader(std::ostream &); // Write header for the output file
+		bool CreateRotationMatrix(double &_alpha, double &_beta, double &_gamma, arma::mat &_R) const;
+		bool CreateUniformGrid(int &_Npoints, std::vector<std::tuple<double, double, double>> &_uniformGrid) const;
 
 	protected:
 		bool RunLocal() override;

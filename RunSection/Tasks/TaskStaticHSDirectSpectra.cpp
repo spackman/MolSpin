@@ -17,6 +17,7 @@
 #include "Spin.h"
 #include "Interaction.h"
 #include "Pulse.h"
+#include <cmath>
 #include <iomanip> // std::setprecision
 
 namespace RunSection
@@ -288,14 +289,6 @@ namespace RunSection
 			}
 
 			// Get the Hamiltonian
-			arma::sp_cx_mat H;
-			if (!space.Hamiltonian(H))
-			{
-				this->Log() << "Failed to obtain the Hamiltonian in Hilbert Space." << std::endl;
-				std::cout << "# ERROR: Failed to obtain the Hamiltonian!" << std::endl;
-				return 1;
-			}
-
 			arma::sp_cx_mat K;
 			K.zeros(InitialStateVector.n_rows * Z, InitialStateVector.n_rows * Z);
 
@@ -307,138 +300,7 @@ namespace RunSection
 				K += (*j)->Rate() / 2 * P;
 			}
 
-			// Get pulses and pulse the system
-			arma::sp_cx_mat A = arma::cx_double(0.0, -1.0) * H - K;
-
-			// Read a pulse sequence from the input
-			std::vector<std::tuple<std::string, double>> Pulsesequence;
-
-			if (this->Properties()->GetPulseSequence("pulsesequence", Pulsesequence))
-			{
-				this->Log() << "Pulsesequence" << std::endl;
-
-				// Loop through all pulse sequences
-				for (const auto &seq : Pulsesequence)
-				{
-					// Write which pulse in pulsesequence is calculating now
-					this->Log() << std::get<0>(seq) << ", " << std::get<1>(seq) << std::endl;
-
-					// Save the parameters from the input as variables
-					std::string pulse_name = std::get<0>(seq);
-					double timerelaxation = std::get<1>(seq);
-
-					for (auto pulse = (*i)->pulses_cbegin(); pulse < (*i)->pulses_cend(); pulse++)
-					{
-						if ((*pulse)->Name().compare(pulse_name) == 0)
-						{
-
-							// Apply a pulse to our density vector
-							if ((*pulse)->Type() == SpinAPI::PulseType::InstantPulse)
-							{
-								// Create a Pulse operator in HS; only one side of exponentials as we only propagate wavevectors
-								arma::sp_cx_mat pulse_operator;
-								if (!space.PulseOperatorOnStatevector((*pulse), pulse_operator))
-								{
-									this->Log() << "Failed to create a pulse operator in SS." << std::endl;
-									continue;
-								}
-
-								// Take a step, "first" is propagator and "second" is current state
-								for (int i = 0; i < int(B.n_cols); i++) 
-								{
-									B.col(i) = pulse_operator * B.col(i);
-								}
-							}
-							else if ((*pulse)->Type() == SpinAPI::PulseType::LongPulseStaticField)
-							{
-
-								// Create a Pulse operator in HS; only one side of exponentials as we only propagate wavevectors
-								arma::sp_cx_mat pulse_operator;
-								if (!space.PulseOperatorOnStatevector((*pulse), pulse_operator))
-								{
-									this->Log() << "Failed to create a pulse operator in SS." << std::endl;
-									continue;
-								}
-
-								// Create array containing a propagator and the current state of each system
-								std::pair<arma::sp_cx_mat, arma::cx_mat> G;
-								
-								// Get the propagator and put it into the array together with the initial state
-								arma::sp_cx_mat A_sp = arma::conv_to<arma::sp_cx_mat>::from(arma::expmat(arma::conv_to<arma::cx_mat>::from((A + (arma::cx_double(0.0, -1.0) * pulse_operator)) * (*pulse)->Timestep())));
-								G = std::pair<arma::sp_cx_mat, arma::cx_mat>(A_sp, B);
-
-								unsigned int steps = static_cast<unsigned int>(std::abs((*pulse)->Pulsetime() / (*pulse)->Timestep()));
-								for (unsigned int n = 1; n <= steps; n++)
-								{
-									// Take a step, "first" is propagator and "second" is current state
-									for (int i = 0; i < int(B.n_cols); i++) 
-									{
-										B.col(i) = G.first * G.second.col(i);
-									}
-
-									// Get the new current state vector matrix
-									G.second = B;
-								}
-							}
-							else if ((*pulse)->Type() == SpinAPI::PulseType::LongPulse)
-							{
-								// Create a Pulse operator in SS
-								arma::sp_cx_mat pulse_operator;
-								if (!space.PulseOperatorOnStatevector((*pulse), pulse_operator))
-								{
-									this->Log() << "Failed to create a pulse operator in SS." << std::endl;
-									continue;
-								}
-
-								// Create array containing a propagator and the current state of each system
-								std::pair<arma::sp_cx_mat, arma::cx_mat> G;
-
-								// Get the propagator and put it into the array together with the initial state
-								arma::sp_cx_mat A_sp = arma::conv_to<arma::sp_cx_mat>::from(arma::expmat(arma::conv_to<arma::cx_mat>::from((A + (arma::cx_double(0.0, -1.0) * pulse_operator * std::cos((*pulse)->Frequency() * (*pulse)->Timestep()))) * (*pulse)->Timestep())));
-								G = std::pair<arma::sp_cx_mat, arma::cx_mat>(A_sp, B);
-
-								unsigned int steps = static_cast<unsigned int>(std::abs((*pulse)->Pulsetime() / (*pulse)->Timestep()));
-								for (unsigned int n = 1; n <= steps; n++)
-								{
-									// Take a step, "first" is propagator and "second" is current state
-									for (int i = 0; i < int(B.n_cols); i++) 
-									{
-										B.col(i) = G.first * G.second.col(i);
-									}
-
-									// Get the new current state density vector
-									G.second = B;
-								}
-							}
-							else
-							{
-								this->Log() << "Not implemented yet, sorry." << std::endl;
-							}
-
-							// Get the system relax during the time
-
-							// Create array containing a propagator and the current state of each system
-							std::pair<arma::sp_cx_mat, arma::cx_mat> G;
-							arma::sp_cx_mat A_sp = arma::conv_to<arma::sp_cx_mat>::from(arma::expmat(arma::conv_to<arma::cx_mat>::from(A * (*pulse)->Timestep())));
-							// Get the propagator and put it into the array together with the initial state
-							G = std::pair<arma::sp_cx_mat, arma::cx_mat>(A_sp, B);
-
-							unsigned int steps = static_cast<unsigned int>(std::abs(timerelaxation / (*pulse)->Timestep()));
-							for (unsigned int n = 1; n <= steps; n++)
-							{
-								// Take a step, "first" is propagator and "second" is current state
-								for (int i = 0; i < int(B.n_cols); i++) 
-								{
-									B.col(i) = G.first * G.second.col(i);
-								}
-
-								// Get the new current state density vector
-								G.second = B;
-							}
-						}
-					}
-				}
-			}
+			arma::cx_mat Binitial = B;
 
 			// Setting or calculating total time.
 			double totaltime;
@@ -465,11 +327,12 @@ namespace RunSection
 			// Number of time propagation steps
 			int num_steps = std::ceil(totaltime / dt);
 			this->Log() << "Number of time propagation steps: " << num_steps << "." << std::endl;
-			if(num_steps == 0)
+			if (num_steps == 0)
 			{
 				num_steps = 1;
 				this->Log() << "change Number of propagation steps to: " << num_steps << " in order to propagate one step." << std::endl;
 			}
+
 			// Choose Propagation Method and other parameters
 			std::string propmethod;
 			this->Properties()->Get("propagationmethod", propmethod);
@@ -540,130 +403,446 @@ namespace RunSection
 			}
 			else
 			{
-				std::cout << "# WARNING: Undefined propagation method, using normal exponential method."<< std::endl;  // autoexpm with single accuracy!" << std::endl;
-				this->Log() << "WARNING: Undefined propagation method, using normal exponential method."<< std::endl;  // autoexpm with single accuracy." << std::endl;
+				std::cout << "# WARNING: Undefined propagation method, using normal exponential method." << std::endl; // autoexpm with single accuracy!" << std::endl;
+				this->Log() << "WARNING: Undefined propagation method, using normal exponential method." << std::endl;	 // autoexpm with single accuracy." << std::endl;
 				propmethod = "normal";
 			}
 
-			// Initialize time propagation placeholders
-			arma::mat ExptValues;
-			ExptValues.zeros(num_steps, projection_counter);
-			arma::vec time(num_steps);
-
-			// Propagate the system in time using the specified method
-
-			// Propagation using autoexpm for matrix exponential
-			if (propmethod == "autoexpm")
+			// Powder averaging options (shared keywords with superspace powder task)
+			std::string Method = "timeevo";
+			this->Properties()->Get("method", Method);
+			bool method_timeevo = Method.compare("timeevo") == 0;
+			bool method_timeinf = Method.compare("timeinf") == 0;
+			if (!method_timeevo && !method_timeinf)
 			{
-				arma::mat M; // used for variable estimation
-				// Include the recombination operator K
-				H = H - arma::cx_double(0.0, 1.0) * K;
-				for (int k = 0; k < num_steps; k++)
-				{
-					// Set the current time
-					double current_time = k * dt;
-					time(k) = current_time;
-
-					// Calculate the expected values for each transition operator
-					for (int idx = 0; idx < projection_counter; idx++)
-					{
-						double abs_trace = std::real(arma::trace(B.t() * Operators[idx] * B));
-						double expected_value = abs_trace / Z;
-						ExptValues(k, idx) = expected_value;
-					}
-
-					// Update B using the Higham propagator
-					B = space.HighamProp(H, B, -arma::cx_double(0.0, 1.0) * dt, precision, M);
-				}
-
-				for (int k = 0; k < num_steps; k++)
-				{
-					// Obtain results
-					this->Data() << this->RunSettings()->CurrentStep() << " ";
-					this->Data() << time(k) << " ";
-					this->WriteStandardOutput(this->Data());
-
-					for (int idx = 0; idx < projection_counter; idx++)
-					{
-						this->Data() << " " << ExptValues(k, idx);
-					}
-					this->Data() << std::endl;
-				}
-			// Propagation using krylov subspace method for matrix exponential
+				this->Log() << "Method \"" << Method << "\" is not supported for Hilbert space spectra. Using timeevo." << std::endl;
+				Method = "timeevo";
+				method_timeevo = true;
+				method_timeinf = false;
 			}
-			else if (propmethod == "krylov")
+
+			int numPoints = 1;
+			this->Properties()->Get("powdersamplingpoints", numPoints);
+			if (numPoints < 1)
 			{
-				// Include the recombination operator K
-				H =  H - arma::cx_double(0.0, 1.0) * K;
+				numPoints = 1;
+			}
 
-				// #pragma omp parallel for
-				for (int itr = 0; itr < Z; itr++)
+			bool powderAverage = numPoints > 1;
+			std::vector<std::tuple<double, double, double>> grid;
+			if (powderAverage)
+			{
+				if (!this->CreateUniformGrid(numPoints, grid))
 				{
-					arma::cx_vec prop_state = B.col(itr);
+					this->Log() << "Failed to obtain a powder grid." << std::endl;
+				}
+				else
+				{
+					this->Log() << "Using powder averaging with " << numPoints << " orientations." << std::endl;
+				}
+			}
+			else
+			{
+				grid.emplace_back(0.0, 0.0, 1.0);
+			}
 
-					// Set the current time
-					double current_time = 0;
-					time(0) = current_time;
+			std::vector<std::string> HamiltonianH0list;
+			std::vector<std::string> HamiltonianH1list;
+			bool hasH0list = this->Properties()->GetList("hamiltonianh0list", HamiltonianH0list, ',');
+			bool hasH1list = this->Properties()->GetList("hamiltonianh1list", HamiltonianH1list, ',');
 
-					// Calculate the expected values for each transition operator
-					for (int idx = 0; idx < projection_counter; idx++)
+			// Read a pulse sequence from the input
+			std::vector<std::tuple<std::string, double>> Pulsesequence;
+			bool hasPulseSequence = this->Properties()->GetPulseSequence("pulsesequence", Pulsesequence);
+			if (hasPulseSequence)
+			{
+				this->Log() << "Pulsesequence" << std::endl;
+			}
+
+			arma::vec time;
+			if (method_timeevo)
+			{
+				time.set_size(num_steps);
+				for (int k = 0; k < num_steps; ++k)
+				{
+					time(k) = k * dt;
+				}
+			}
+
+			arma::mat ExptValues; // reused for timeevo
+			if (method_timeevo)
+			{
+				ExptValues.zeros(num_steps, projection_counter);
+			}
+			arma::cx_mat rho_integrated;
+			if (method_timeinf)
+			{
+				int dim = InitialStateVector.n_rows * Z;
+				rho_integrated.zeros(dim, dim);
+			}
+
+			size_t grid_index = 0;
+			for (const auto &grid_point : grid)
+			{
+				double theta, phi, weight;
+				std::tie(theta, phi, weight) = grid_point;
+
+				arma::mat Rot_mat = arma::eye<arma::mat>(3, 3);
+				if (powderAverage)
+				{
+					double gamma = 0.0;
+					if (!this->CreateRotationMatrix(gamma, theta, phi, Rot_mat))
 					{
-						double result = std::abs(arma::cdot(prop_state, Operators[idx] * prop_state));
-						ExptValues(0, idx) += result;
+						this->Log() << "Failed to obtain rotation matrix for powder orientation." << std::endl;
 					}
+				}
 
-					arma::cx_mat Hessen; // Upper Hessenberg matrix
-					Hessen.zeros(krylovsize, krylovsize);
-
-					arma::cx_mat KryBasis(InitialStateVector.n_rows * Z, krylovsize, arma::fill::zeros); // Orthogonal krylov subspace
-
-					KryBasis.col(0) = prop_state / norm(prop_state);
-
-					double h_mplusone_m;
-					space.ArnoldiProcess(H, prop_state, KryBasis, Hessen, krylovsize, h_mplusone_m);
-
-					arma::cx_colvec e1;
-					e1.zeros(krylovsize);
-					e1(0) = 1;
-					arma::cx_colvec ek;
-					ek.zeros(krylovsize);
-					ek(krylovsize - 1) = 1;
-
-					arma::cx_vec cx = arma::expmat(Hessen * dt) * e1;
-
-					prop_state = norm(prop_state) * KryBasis * cx;
-
-					int k = 1;
-
-					while (k < num_steps)
+				arma::sp_cx_mat H;
+				if (hasH0list)
+				{
+					arma::sp_cx_mat H0;
+					if (!space.BaseHamiltonianRotated(HamiltonianH0list, Rot_mat, H0))
 					{
-						// Set the current time
-						current_time = k * dt;
-						time(k) = current_time;
+						this->Log() << "Failed to obtain rotated Hamiltonian for SpinSystem \"" << (*i)->Name() << "\"." << std::endl;
+						continue;
+					}
+					H = H0;
+
+					if (hasH1list)
+					{
+						arma::sp_cx_mat H1;
+						if (!space.ThermalHamiltonian(HamiltonianH1list, H1))
+						{
+							this->Log() << "Failed to obtain Hamiltonian H1 in Hilbert Space." << std::endl;
+							continue;
+						}
+
+						H += H1;
+					}
+				}
+				else
+				{
+					if (!space.Hamiltonian(H))
+					{
+						this->Log() << "Failed to obtain the Hamiltonian in Hilbert Space." << std::endl;
+						std::cout << "# ERROR: Failed to obtain the Hamiltonian!" << std::endl;
+						continue;
+					}
+				}
+
+				arma::cx_mat B = Binitial;
+
+				// Get pulses and pulse the system for this orientation (only for time evolution)
+				arma::sp_cx_mat A = arma::cx_double(0.0, -1.0) * H - K;
+
+				if (hasPulseSequence && method_timeevo)
+				{
+					// Loop through all pulse sequences
+					for (const auto &seq : Pulsesequence)
+					{
+						// Write which pulse in pulsesequence is calculating now
+						if (grid_index == 0)
+						{
+							this->Log() << std::get<0>(seq) << ", " << std::get<1>(seq) << std::endl;
+						}
+
+						// Save the parameters from the input as variables
+						std::string pulse_name = std::get<0>(seq);
+						double timerelaxation = std::get<1>(seq);
+
+						for (auto pulse = (*i)->pulses_cbegin(); pulse < (*i)->pulses_cend(); pulse++)
+						{
+							if ((*pulse)->Name().compare(pulse_name) == 0)
+							{
+
+								// Apply a pulse to our density vector
+								if ((*pulse)->Type() == SpinAPI::PulseType::InstantPulse)
+								{
+									// Create a Pulse operator in HS; only one side of exponentials as we only propagate wavevectors
+									arma::sp_cx_mat pulse_operator;
+									if (!space.PulseOperatorOnStatevector((*pulse), pulse_operator))
+									{
+										this->Log() << "Failed to create a pulse operator in SS." << std::endl;
+										continue;
+									}
+
+									// Take a step, "first" is propagator and "second" is current state
+									for (int col = 0; col < int(B.n_cols); col++)
+									{
+										B.col(col) = pulse_operator * B.col(col);
+									}
+								}
+								else if ((*pulse)->Type() == SpinAPI::PulseType::LongPulseStaticField)
+								{
+
+									// Create a Pulse operator in HS; only one side of exponentials as we only propagate wavevectors
+									arma::sp_cx_mat pulse_operator;
+									if (!space.PulseOperatorOnStatevector((*pulse), pulse_operator))
+									{
+										this->Log() << "Failed to create a pulse operator in SS." << std::endl;
+										continue;
+									}
+
+									// Create array containing a propagator and the current state of each system
+									std::pair<arma::sp_cx_mat, arma::cx_mat> G;
+
+									// Get the propagator and put it into the array together with the initial state
+									arma::sp_cx_mat A_sp = arma::conv_to<arma::sp_cx_mat>::from(arma::expmat(arma::conv_to<arma::cx_mat>::from((A + (arma::cx_double(0.0, -1.0) * pulse_operator)) * (*pulse)->Timestep())));
+									G = std::pair<arma::sp_cx_mat, arma::cx_mat>(A_sp, B);
+
+									unsigned int steps = static_cast<unsigned int>(std::abs((*pulse)->Pulsetime() / (*pulse)->Timestep()));
+									for (unsigned int n = 1; n <= steps; n++)
+									{
+										// Take a step, "first" is propagator and "second" is current state
+										for (int col = 0; col < int(B.n_cols); col++)
+										{
+											B.col(col) = G.first * G.second.col(col);
+										}
+
+										// Get the new current state vector matrix
+										G.second = B;
+									}
+								}
+								else if ((*pulse)->Type() == SpinAPI::PulseType::LongPulse)
+								{
+									// Create a Pulse operator in SS
+									arma::sp_cx_mat pulse_operator;
+									if (!space.PulseOperatorOnStatevector((*pulse), pulse_operator))
+									{
+										this->Log() << "Failed to create a pulse operator in SS." << std::endl;
+										continue;
+									}
+
+									// Create array containing a propagator and the current state of each system
+									std::pair<arma::sp_cx_mat, arma::cx_mat> G;
+
+									// Get the propagator and put it into the array together with the initial state
+									arma::sp_cx_mat A_sp = arma::conv_to<arma::sp_cx_mat>::from(arma::expmat(arma::conv_to<arma::cx_mat>::from((A + (arma::cx_double(0.0, -1.0) * pulse_operator * std::cos((*pulse)->Frequency() * (*pulse)->Timestep()))) * (*pulse)->Timestep())));
+									G = std::pair<arma::sp_cx_mat, arma::cx_mat>(A_sp, B);
+
+									unsigned int steps = static_cast<unsigned int>(std::abs((*pulse)->Pulsetime() / (*pulse)->Timestep()));
+									for (unsigned int n = 1; n <= steps; n++)
+									{
+										// Take a step, "first" is propagator and "second" is current state
+										for (int col = 0; col < int(B.n_cols); col++)
+										{
+											B.col(col) = G.first * G.second.col(col);
+										}
+
+										// Get the new current state density vector
+										G.second = B;
+									}
+								}
+								else
+								{
+									this->Log() << "Not implemented yet, sorry." << std::endl;
+								}
+
+								// Get the system relax during the time
+
+								// Create array containing a propagator and the current state of each system
+								std::pair<arma::sp_cx_mat, arma::cx_mat> G;
+								arma::sp_cx_mat A_sp = arma::conv_to<arma::sp_cx_mat>::from(arma::expmat(arma::conv_to<arma::cx_mat>::from(A * (*pulse)->Timestep())));
+								// Get the propagator and put it into the array together with the initial state
+								G = std::pair<arma::sp_cx_mat, arma::cx_mat>(A_sp, B);
+
+								unsigned int steps = static_cast<unsigned int>(std::abs(timerelaxation / (*pulse)->Timestep()));
+								for (unsigned int n = 1; n <= steps; n++)
+								{
+									// Take a step, "first" is propagator and "second" is current state
+									for (int col = 0; col < int(B.n_cols); col++)
+									{
+										B.col(col) = G.first * G.second.col(col);
+									}
+
+									// Get the new current state density vector
+									G.second = B;
+								}
+							}
+						}
+					}
+				}
+
+				arma::mat ExptValuesOrientation;
+				if (method_timeevo)
+					ExptValuesOrientation.zeros(num_steps, projection_counter);
+
+				// Propagate the system in time using the specified method
+				if (method_timeevo && propmethod == "autoexpm")
+				{
+					arma::mat M; // used for variable estimation
+					arma::sp_cx_mat H_prop = H - arma::cx_double(0.0, 1.0) * K;
+
+					for (int k = 0; k < num_steps; k++)
+					{
+						// Calculate the expected values for each transition operator
+						for (int idx = 0; idx < projection_counter; idx++)
+						{
+							double abs_trace = std::real(arma::trace(B.t() * Operators[idx] * B));
+							double expected_value = abs_trace / Z;
+							ExptValuesOrientation(k, idx) = expected_value;
+						}
+
+						// Update B using the Higham propagator
+						B = space.HighamProp(H_prop, B, -arma::cx_double(0.0, 1.0) * dt, precision, M);
+					}
+				}
+				else if (method_timeevo && propmethod == "krylov")
+				{
+					arma::sp_cx_mat H_prop = H - arma::cx_double(0.0, 1.0) * K;
+
+					for (int itr = 0; itr < Z; itr++)
+					{
+						arma::cx_vec prop_state = B.col(itr);
 
 						// Calculate the expected values for each transition operator
 						for (int idx = 0; idx < projection_counter; idx++)
 						{
 							double result = std::abs(arma::cdot(prop_state, Operators[idx] * prop_state));
-							ExptValues(k, idx) += result;
+							ExptValuesOrientation(0, idx) += result;
 						}
 
-						Hessen.zeros(krylovsize, krylovsize);
-						KryBasis.zeros(InitialStateVector.n_rows * Z, krylovsize);
+						arma::cx_mat Hessen(krylovsize, krylovsize, arma::fill::zeros); // Upper Hessenberg matrix
+
+						arma::cx_mat KryBasis(InitialStateVector.n_rows * Z, krylovsize, arma::fill::zeros); // Orthogonal krylov subspace
 
 						KryBasis.col(0) = prop_state / norm(prop_state);
 
-						space.ArnoldiProcess(H, prop_state, KryBasis, Hessen, krylovsize, h_mplusone_m);
-						cx = arma::expmat(Hessen * dt) * e1;
+						double h_mplusone_m;
+						space.ArnoldiProcess(H_prop, prop_state, KryBasis, Hessen, krylovsize, h_mplusone_m);
 
-						// Update the state using Krylov Subspace propagator
+						arma::cx_colvec e1;
+						e1.zeros(krylovsize);
+						e1(0) = 1;
+						arma::cx_colvec ek;
+						ek.zeros(krylovsize);
+						ek(krylovsize - 1) = 1;
+
+						arma::cx_vec cx = arma::expmat(Hessen * dt) * e1;
+
 						prop_state = norm(prop_state) * KryBasis * cx;
-						k++;
+
+						int k = 1;
+
+						while (k < num_steps)
+						{
+							// Calculate the expected values for each transition operator
+							for (int idx = 0; idx < projection_counter; idx++)
+							{
+								double result = std::abs(arma::cdot(prop_state, Operators[idx] * prop_state));
+								ExptValuesOrientation(k, idx) += result;
+							}
+
+							Hessen.zeros(krylovsize, krylovsize);
+							KryBasis.zeros(InitialStateVector.n_rows * Z, krylovsize);
+
+							KryBasis.col(0) = prop_state / norm(prop_state);
+
+							space.ArnoldiProcess(H_prop, prop_state, KryBasis, Hessen, krylovsize, h_mplusone_m);
+							cx = arma::expmat(Hessen * dt) * e1;
+
+							// Update the state using Krylov Subspace propagator
+							prop_state = norm(prop_state) * KryBasis * cx;
+							k++;
+						}
+					}
+
+					ExptValuesOrientation /= Z;
+				}
+				else if (method_timeevo)
+				{
+					this->Log() << "Using robust matrix exponential propagator for time-independent Hamiltonian." << std::endl;
+
+					// Include the recombination operator K
+					arma::sp_cx_mat H_total = arma::cx_double(0.0, -1.0) * H - K;
+
+					// Precompute the matrix exponential for the entire time step
+					arma::cx_mat exp_H = arma::expmat(arma::cx_mat(H_total) * dt);
+
+					// Propagate B
+					for (int k = 0; k < num_steps; ++k)
+					{
+						// Calculate the expected values for each transition operator
+						for (int idx = 0; idx < projection_counter; ++idx)
+						{
+							double abs_trace = std::real(arma::trace(B.t() * arma::cx_mat(Operators[idx]) * B));
+							double expected_value = abs_trace / Z;
+							ExptValuesOrientation(k, idx) = expected_value;
+						}
+
+						for (int col = 0; col < int(B.n_cols); col++)
+						{
+							B.col(col) = exp_H * B.col(col);
+						}
 					}
 				}
 
-				ExptValues /= Z;
-				
+				if (method_timeevo)
+					ExptValues += weight * ExptValuesOrientation;
+				if (method_timeinf)
+				{
+					// Compute integrated density matrix in Hilbert space via Sylvester/Lyapunov:
+					// A_state X + X A_state^† = -rho0, with A_state = -i H - K
+					arma::cx_mat rho0mat = B * B.st();
+					arma::cx_mat A_dense = -arma::cx_double(0.0, 1.0) * arma::cx_mat(H) - arma::cx_mat(K);
+					arma::cx_mat B_state = A_dense.st(); // Hermitian adjoint
+
+					// Solve (I ⊗ A_state^† + A_state ⊗ I) vec(X) = -vec(rho0)
+					arma::cx_mat Iden_dense = arma::eye<arma::cx_mat>(H.n_rows, H.n_cols);
+					arma::cx_mat kron_left = arma::kron(Iden_dense, B_state.t());
+					arma::cx_mat kron_right = arma::kron(A_dense, Iden_dense);
+					arma::cx_mat L = kron_left + kron_right;
+					arma::cx_vec rhs = arma::vectorise(-rho0mat);
+					arma::cx_vec sol = arma::solve(L, rhs);
+					if (sol.is_empty())
+					{
+						this->Log() << "Failed to solve timeinf Lyapunov equation in Hilbert space." << std::endl;
+						continue;
+					}
+					arma::cx_mat X = arma::reshape(sol, rho0mat.n_rows, rho0mat.n_cols);
+
+					rho_integrated += weight * X;
+				}
+				grid_index++;
+			}
+
+			// Propagate the system in time using the specified method and write results
+			bool integration = false;
+			this->Properties()->Get("integration", integration);
+
+			if (method_timeinf)
+			{
+				this->Log() << "Writing time-integrated (time -> inf) polarisation." << std::endl;
+
+				this->Data() << this->RunSettings()->CurrentStep() << " ";
+				this->Data() << "inf"
+							 << " ";
+				this->WriteStandardOutput(this->Data());
+
+				for (int idx = 0; idx < projection_counter; idx++)
+				{
+					double val = std::real(arma::trace(arma::cx_mat(Operators[idx]) * rho_integrated)) / Z;
+					this->Data() << std::setprecision(12) << val << " ";
+				}
+				this->Data() << std::endl;
+			}
+			else if (integration)
+			{
+				this->Log() << "Writing integrated polarisation over time." << std::endl;
+
+				arma::mat ans = arma::trapz(time, ExptValues);
+
+				this->Data() << this->RunSettings()->CurrentStep() << " ";
+				this->WriteStandardOutput(this->Data());
+
+				for (int idx = 0; idx < projection_counter; idx++)
+				{
+					this->Data() << std::setprecision(12) << ans(0, idx) << " ";
+				}
+				this->Data() << std::endl;
+			}
+			else if (propmethod == "autoexpm" || propmethod == "krylov")
+			{
 				for (int k = 0; k < num_steps; k++)
 				{
 					// Obtain results
@@ -678,72 +857,20 @@ namespace RunSection
 					this->Data() << std::endl;
 				}
 			}
-			else if (propmethod == "normal")
+			else
 			{
-				this->Log() << "Using robust matrix exponential propagator for time-independent Hamiltonian." << std::endl;
-
-				// Include the recombination operator K
-				arma::sp_cx_mat H_total = arma::cx_double(0.0, -1.0) * H - K;
-
-				// Precompute the matrix exponential for the entire time step
-				arma::cx_mat exp_H = arma::expmat(arma::cx_mat(H_total) * dt);
-
-				// Propagate B
-				for (int k = 0; k < num_steps; ++k) {
-					// Set the current time
-					double current_time = k * dt;
-					time(k) = current_time;
-
-					// Calculate the expected values for each transition operator
-					for (int idx = 0; idx < projection_counter; ++idx) {
-						double abs_trace = std::real(arma::trace(B.t() * arma::cx_mat(Operators[idx]) * B));
-						double expected_value = abs_trace / Z;
-						ExptValues(k, idx) = expected_value;
-					}
-
-					for (int i = 0; i < int(B.n_cols); i++) {
-						B.col(i) = exp_H * B.col(i);
-					}
-				}
-
-				// Read if the result should be integrated or not
-				bool integration = false;
-
-				if (!this->Properties()->Get("integration", integration))
-				{
-					this->Log() << "Failed to obtain an input for an Integtation." << std::endl;
-
-				}
-				
-				if(integration==true)
+				for (int k = 0; k < num_steps; ++k)
 				{
 					// Write results
 					this->Data() << this->RunSettings()->CurrentStep() << " ";
+					this->Data() << time(k) << " ";
 					this->WriteStandardOutput(this->Data());
-					
-					arma::mat ans = arma::trapz(time, ExptValues);
 
-					for (int it = 0; it < projection_counter; it++)
+					for (int idx = 0; idx < projection_counter; ++idx)
 					{
-						// Quantym yields without correction factor
-						ans(0, it) = ans(0, it) * rates(it);
-						
-						this->Data() << std::setprecision(6) << ans(0, it) << " ";
+						this->Data() << " " << ExptValues(k, idx);
 					}
-				}
-				else
-				{
-					for (int k = 0; k < num_steps; ++k) {
-						// Write results
-						this->Data() << this->RunSettings()->CurrentStep() << " ";
-						this->Data() << time(k) << " ";
-						this->WriteStandardOutput(this->Data());
-
-						for (int idx = 0; idx < projection_counter; ++idx) {
-							this->Data() << " " << ExptValues(k, idx);
-						}
-						this->Data() << std::endl;
-					}
+					this->Data() << std::endl;
 				}
 			}
 
@@ -835,6 +962,51 @@ namespace RunSection
 			{
 				this->Log() << "Warning: Unknown reaction operator type specified. Using default reaction operators." << std::endl;
 			}
+		}
+
+		return true;
+	}
+
+	bool TaskStaticHSDirectSpectra::CreateRotationMatrix(double &_alpha, double &_beta, double &_gamma, arma::mat &_R) const
+	{
+		arma::mat R1 = {
+			{std::cos(_alpha), -std::sin(_alpha), 0.0},
+			{std::sin(_alpha), std::cos(_alpha), 0.0},
+			{0.0, 0.0, 1.0}};
+
+		arma::mat R2 = {
+			{std::cos(_beta), 0.0, std::sin(_beta)},
+			{0.0, 1.0, 0.0},
+			{-std::sin(_beta), 0.0, std::cos(_beta)}};
+
+		arma::mat R3 = {
+			{std::cos(_gamma), -std::sin(_gamma), 0.0},
+			{std::sin(_gamma), std::cos(_gamma), 0.0},
+			{0.0, 0.0, 1.0}};
+
+		_R = R1 * R2 * R3;
+
+		return true;
+	}
+
+	bool TaskStaticHSDirectSpectra::CreateUniformGrid(int &_Npoints, std::vector<std::tuple<double, double, double>> &_uniformGrid) const
+	{
+		std::vector<double> theta(_Npoints);
+		std::vector<double> phi(_Npoints);
+		std::vector<double> weight(_Npoints);
+
+		_uniformGrid.resize(_Npoints);
+
+		const double golden = arma::datum::pi * (1.0 + std::sqrt(5.0)); // not standard golden angle
+
+		for (int i = 0; i < _Npoints; ++i)
+		{
+			double index = static_cast<double>(i) + 0.5;
+
+			theta[i] = std::acos(1.0 - index / _Npoints);							// hemisphere
+			phi[i] = golden * index;												// hemisphere
+			weight[i] = std::sin(theta[i]) * 2 * arma::datum::pi / _Npoints; // 2 * pi for hemisphere
+			_uniformGrid[i] = {theta[i], phi[i], weight[i]};
 		}
 
 		return true;
