@@ -1,0 +1,368 @@
+//////////////////////////////////////////////////////////////////////////////
+// MolSpin Unit Testing Module
+//
+// Tests the StaticSSPowderSpectra and StaticHSDirectSpectra tasks.
+//
+// Molecular Spin Dynamics Software - developed by Claus Nielsen and Luca Gerhards.
+// (c) 2025 Quantum Biology and Computational Physics Group.
+// See LICENSE.txt for license information.
+//////////////////////////////////////////////////////////////////////////////
+#include <algorithm>
+#include <cmath>
+#include <sstream>
+#include <string>
+#include <vector>
+
+#include "RunSection.h"
+#include "TaskStaticHSDirectSpectra.h"
+#include "TaskStaticSSPowderSpectra.h"
+
+namespace
+{
+	struct TwoElectronSystem
+	{
+		std::shared_ptr<SpinAPI::SpinSystem> spinsys;
+		std::vector<std::shared_ptr<SpinAPI::SpinSystem>> spinsystems;
+		std::shared_ptr<SpinAPI::State> state_tplus;
+		std::shared_ptr<SpinAPI::State> state_identity;
+	};
+
+	TwoElectronSystem BuildTwoElectronSystem(double _bx, double _by, double _bz, bool _add_transition, double _rate)
+	{
+		TwoElectronSystem system;
+
+		auto spin1 = std::make_shared<SpinAPI::Spin>("electron1", "spin=1/2;tensor=isotropic(2);");
+		auto spin2 = std::make_shared<SpinAPI::Spin>("electron2", "spin=1/2;tensor=isotropic(2);");
+
+		std::ostringstream zeeman_props;
+		zeeman_props << "type=zeeman;spins=electron1,electron2;field=" << _bx << " " << _by << " " << _bz
+					 << ";ignoretensors=true;commonprefactor=true;prefactor=1.0;";
+		auto zeeman = std::make_shared<SpinAPI::Interaction>("zeeman", zeeman_props.str());
+
+		auto state_tplus = std::make_shared<SpinAPI::State>("Tplus", "spin(electron1)=|1/2>;spin(electron2)=|1/2>;");
+		auto state_identity = std::make_shared<SpinAPI::State>("Identity", "");
+
+		auto spinsys = std::make_shared<SpinAPI::SpinSystem>("System");
+		spinsys->Add(spin1);
+		spinsys->Add(spin2);
+		spinsys->Add(zeeman);
+		spinsys->Add(state_tplus);
+		spinsys->Add(state_identity);
+		spinsys->ValidateInteractions();
+
+		if (_add_transition)
+		{
+			auto transition = std::make_shared<SpinAPI::Transition>("sink", "type=sink;sourcestate=Identity;rate=" + std::to_string(_rate) + ";", spinsys);
+			spinsys->Add(transition);
+		}
+
+		auto spinsysParser = std::make_shared<MSDParser::ObjectParser>("spinsyssettings", "initialstate=Tplus;");
+		spinsys->SetProperties(spinsysParser);
+
+		system.spinsys = spinsys;
+		system.spinsystems.push_back(spinsys);
+		system.state_tplus = state_tplus;
+		system.state_identity = state_identity;
+
+		return system;
+	}
+
+	bool PrepareSystem(const TwoElectronSystem &_system)
+	{
+		bool ok = true;
+		ok &= _system.state_tplus->ParseFromSystem(*_system.spinsys);
+		ok &= _system.state_identity->ParseFromSystem(*_system.spinsys);
+		ok &= (_system.spinsys->ValidateTransitions(_system.spinsystems).size() == 0);
+		return ok;
+	}
+
+	bool RunPowderTask(const std::shared_ptr<SpinAPI::SpinSystem> &_spinsys, const std::string &_task_type, const std::string &_props, std::string &_data)
+	{
+		RunSection::RunSection rs;
+		rs.Add(_spinsys);
+
+		std::string taskname = "testtask";
+		MSDParser::ObjectParser taskParser(taskname, "type=" + _task_type + ";" + _props);
+		rs.Add(MSDParser::ObjectType::Task, taskParser);
+		auto task = rs.GetTask(taskname);
+
+		std::ostringstream logstream;
+		std::ostringstream datastream;
+		task->SetLogStream(logstream);
+		task->SetDataStream(datastream);
+
+		if (!rs.Run(1))
+			return false;
+
+		_data = datastream.str();
+		return true;
+	}
+
+	bool ParseDataRows(const std::string &_data, std::vector<std::vector<double>> &_rows)
+	{
+		std::istringstream stream(_data);
+		std::string line;
+		bool header_skipped = false;
+		while (std::getline(stream, line))
+		{
+			if (line.empty())
+				continue;
+			if (!header_skipped)
+			{
+				header_skipped = true;
+				continue;
+			}
+
+			std::istringstream line_stream(line);
+			std::string token;
+			int token_index = 0;
+			std::vector<double> row;
+			while (line_stream >> token)
+			{
+				if (token_index < 2)
+				{
+					token_index++;
+					continue;
+				}
+
+				try
+				{
+					row.push_back(std::stod(token));
+				}
+				catch (const std::exception &)
+				{
+					return false;
+				}
+
+				token_index++;
+			}
+
+			if (!row.empty())
+				_rows.push_back(row);
+		}
+
+		return !_rows.empty();
+	}
+
+	bool CheckTripletStructure(const std::vector<double> &_row, double _tol_zero, double _tol_equal)
+	{
+		if (_row.size() < 6)
+			return false;
+
+		bool ok = true;
+		ok &= std::abs(_row[0]) < _tol_zero;
+		ok &= std::abs(_row[1]) < _tol_zero;
+		ok &= std::abs(_row[3]) < _tol_zero;
+		ok &= std::abs(_row[4]) < _tol_zero;
+
+		ok &= (_row[2] > 0.0);
+		ok &= (_row[5] > 0.0);
+		ok &= equal_double(_row[2], _row[5], _tol_equal);
+		ok &= (std::abs(_row[2]) > 1e-6);
+
+		return ok;
+	}
+
+	bool RowsConstant(const std::vector<std::vector<double>> &_rows, double _tol)
+	{
+		if (_rows.size() < 2)
+			return false;
+
+		for (size_t r = 1; r < _rows.size(); ++r)
+		{
+			if (_rows[r].size() != _rows[0].size())
+				return false;
+			for (size_t i = 0; i < _rows[r].size(); ++i)
+			{
+				if (!equal_double(_rows[r][i], _rows[0][i], _tol))
+					return false;
+			}
+		}
+
+		return true;
+	}
+
+	bool RowsLinearIncrease(const std::vector<std::vector<double>> &_rows, size_t _col, double _tol)
+	{
+		if (_rows.size() < 4 || _rows[0].size() <= _col)
+			return false;
+
+		double delta_ref = _rows[2][_col] - _rows[1][_col];
+		if (delta_ref <= 0.0)
+			return false;
+
+		for (size_t r = 3; r < _rows.size(); ++r)
+		{
+			double delta = _rows[r][_col] - _rows[r - 1][_col];
+			if (delta < 0.0)
+				return false;
+			if (!equal_double(delta, delta_ref, _tol))
+				return false;
+		}
+
+		return true;
+	}
+
+	bool RowsClose(const std::vector<std::vector<double>> &_a, const std::vector<std::vector<double>> &_b, double _tol)
+	{
+		if (_a.size() != _b.size() || _a.empty())
+			return false;
+
+		for (size_t r = 0; r < _a.size(); ++r)
+		{
+			if (_a[r].size() != _b[r].size())
+				return false;
+			for (size_t i = 0; i < _a[r].size(); ++i)
+			{
+				if (!equal_double(_a[r][i], _b[r][i], _tol))
+					return false;
+			}
+		}
+
+		return true;
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// Time-inf: with decay and zero Hamiltonian, integrated values equal initial.
+bool test_task_staticpowder_timeinf_triplet_expected()
+{
+	auto system = BuildTwoElectronSystem(0.0, 0.0, 0.0, true, 1.0);
+	bool ok = PrepareSystem(system);
+
+	std::string ss_data;
+	std::string hs_data;
+	std::string props = "method=timeinf;cidsp=false;spinlist=electron1,electron2;powdersamplingpoints=1;"
+						"hamiltonianh0list=zeeman;hamiltonianh1list=zeeman;totaltime=1.0;timestep=0.1;";
+
+	ok &= RunPowderTask(system.spinsys, "staticss-powderspectra", props, ss_data);
+	ok &= RunPowderTask(system.spinsys, "statichs-direct-spectra", props + "propagationmethod=normal;", hs_data);
+
+	std::vector<std::vector<double>> ss_rows;
+	std::vector<std::vector<double>> hs_rows;
+	ok &= ParseDataRows(ss_data, ss_rows);
+	ok &= ParseDataRows(hs_data, hs_rows);
+	ok &= (ss_rows.size() == 1);
+	ok &= (hs_rows.size() == 1);
+	ok &= CheckTripletStructure(ss_rows[0], 1e-8, 1e-8);
+	ok &= CheckTripletStructure(hs_rows[0], 1e-8, 1e-8);
+	ok &= RowsClose(ss_rows, hs_rows, 1e-6);
+
+	return ok;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// Time-evo: with zero Hamiltonian, values should be constant (no drift).
+bool test_task_staticpowder_timeevo_constant_no_drift()
+{
+	auto system = BuildTwoElectronSystem(0.0, 0.0, 0.0, false, 0.0);
+	bool ok = PrepareSystem(system);
+
+	std::string ss_data;
+	std::string hs_data;
+	std::string props = "method=timeevo;integration=false;cidsp=false;spinlist=electron1,electron2;powdersamplingpoints=1;"
+						"hamiltonianh0list=zeeman;hamiltonianh1list=zeeman;totaltime=0.95;timestep=0.1;";
+
+	ok &= RunPowderTask(system.spinsys, "staticss-powderspectra", props, ss_data);
+	ok &= RunPowderTask(system.spinsys, "statichs-direct-spectra", props + "propagationmethod=normal;", hs_data);
+
+	std::vector<std::vector<double>> ss_rows;
+	std::vector<std::vector<double>> hs_rows;
+	ok &= ParseDataRows(ss_data, ss_rows);
+	ok &= ParseDataRows(hs_data, hs_rows);
+
+	ok &= (ss_rows.size() >= 2);
+	ok &= (hs_rows.size() >= 2);
+	ok &= CheckTripletStructure(ss_rows.front(), 1e-8, 1e-8);
+	ok &= CheckTripletStructure(hs_rows.front(), 1e-8, 1e-8);
+	ok &= RowsConstant(ss_rows, 1e-8);
+	ok &= RowsConstant(hs_rows, 1e-8);
+	ok &= RowsClose(ss_rows, hs_rows, 1e-6);
+
+	return ok;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// Time-evo integration: with constant values, integral should be linear in time.
+bool test_task_staticpowder_timeevo_integration_linear()
+{
+	auto system = BuildTwoElectronSystem(0.0, 0.0, 0.0, false, 0.0);
+	bool ok = PrepareSystem(system);
+
+	std::string ss_data;
+	std::string hs_data;
+	std::string props = "method=timeevo;integration=true;cidsp=false;spinlist=electron1,electron2;powdersamplingpoints=1;"
+						"hamiltonianh0list=zeeman;hamiltonianh1list=zeeman;totaltime=0.95;timestep=0.1;";
+
+	ok &= RunPowderTask(system.spinsys, "staticss-powderspectra", props, ss_data);
+	ok &= RunPowderTask(system.spinsys, "statichs-direct-spectra", props + "propagationmethod=normal;", hs_data);
+
+	std::vector<std::vector<double>> ss_rows;
+	std::vector<std::vector<double>> hs_rows;
+	ok &= ParseDataRows(ss_data, ss_rows);
+	ok &= ParseDataRows(hs_data, hs_rows);
+
+	if (ss_rows.empty() || hs_rows.empty())
+		return false;
+
+	double dt = 0.1;
+	double expected_time = (static_cast<double>(ss_rows.size()) - 1.0) * dt;
+	ok &= (expected_time > 0.0);
+	ok &= RowsLinearIncrease(ss_rows, 2, 1e-8);
+	ok &= RowsLinearIncrease(hs_rows, 2, 1e-8);
+	ok &= CheckTripletStructure(ss_rows.back(), 1e-8, 1e-8);
+	ok &= CheckTripletStructure(hs_rows.back(), 1e-8, 1e-8);
+	ok &= RowsClose(ss_rows, hs_rows, 1e-6);
+
+	return ok;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// Time-evo: HS and SS should agree for non-trivial dynamics.
+bool test_task_staticpowder_timeevo_ss_hs_agree()
+{
+	auto system = BuildTwoElectronSystem(1.0, 0.2, 0.0, false, 0.0);
+	bool ok = PrepareSystem(system);
+
+	std::string ss_data;
+	std::string hs_data;
+	std::string props = "method=timeevo;integration=false;cidsp=false;spinlist=electron1,electron2;powdersamplingpoints=3;"
+						"hamiltonianh0list=zeeman;hamiltonianh1list=zeeman;totaltime=0.95;timestep=0.1;";
+
+	ok &= RunPowderTask(system.spinsys, "staticss-powderspectra", props, ss_data);
+	ok &= RunPowderTask(system.spinsys, "statichs-direct-spectra", props + "propagationmethod=normal;", hs_data);
+
+	std::vector<std::vector<double>> ss_rows;
+	std::vector<std::vector<double>> hs_rows;
+	ok &= ParseDataRows(ss_data, ss_rows);
+	ok &= ParseDataRows(hs_data, hs_rows);
+
+	if (ss_rows.empty() || hs_rows.empty())
+		return false;
+	ok &= (ss_rows.size() == hs_rows.size());
+
+	const auto &ss_last = ss_rows.back();
+	const auto &hs_last = hs_rows.back();
+	if (ss_last.size() != hs_last.size())
+		return false;
+
+	double max_abs = 0.0;
+	for (size_t i = 0; i < ss_last.size(); ++i)
+	{
+		max_abs = std::max(max_abs, std::abs(ss_last[i]));
+		ok &= equal_double(ss_last[i], hs_last[i], 1e-5);
+	}
+
+	ok &= (max_abs > 1e-3);
+	return ok;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// Add all the test cases
+void AddTaskStaticPowderSpectraTests(std::vector<test_case> &_cases)
+{
+	_cases.push_back(test_case("Task StaticPowderSpectra timeinf triplet", test_task_staticpowder_timeinf_triplet_expected));
+	_cases.push_back(test_case("Task StaticPowderSpectra timeevo constancy", test_task_staticpowder_timeevo_constant_no_drift));
+	_cases.push_back(test_case("Task StaticPowderSpectra timeevo integration", test_task_staticpowder_timeevo_integration_linear));
+	_cases.push_back(test_case("Task StaticPowderSpectra timeevo SS/HS agree", test_task_staticpowder_timeevo_ss_hs_agree));
+}

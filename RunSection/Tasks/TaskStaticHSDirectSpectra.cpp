@@ -25,7 +25,7 @@ namespace RunSection
 	// -----------------------------------------------------
 	// TaskStaticHSDirectSpectra Constructors and Destructor
 	// -----------------------------------------------------
-	TaskStaticHSDirectSpectra::TaskStaticHSDirectSpectra(const MSDParser::ObjectParser &_parser, const RunSection &_runsection) : BasicTask(_parser, _runsection), timestep(0.1), totaltime(1000), reactionOperators(SpinAPI::ReactionOperatorType::Haberkorn)
+	TaskStaticHSDirectSpectra::TaskStaticHSDirectSpectra(const MSDParser::ObjectParser &_parser, const RunSection &_runsection) : BasicTask(_parser, _runsection), timestep(1.0), totaltime(1.0e+4), reactionOperators(SpinAPI::ReactionOperatorType::Haberkorn)
 	{
 	}
 
@@ -303,26 +303,39 @@ namespace RunSection
 			arma::cx_mat Binitial = B;
 
 			// Setting or calculating total time.
-			double totaltime;
-			this->Properties()->Get("totaltime", totaltime);
+			double totaltime = this->totaltime;
+			double inputTotaltime = 0.0;
+			if (this->Properties()->Get("totaltime", inputTotaltime))
+			{
+				if (std::isfinite(inputTotaltime) && inputTotaltime >= 0.0)
+				{
+					totaltime = inputTotaltime;
+				}
+				else
+				{
+					this->Log() << "# ERROR: invalid total time!" << std::endl;
+					return false;
+				}
+			}
 
 			// Setting timestep
-			double dt;
-			double timestep;
-			this->Properties()->Get("timestep", timestep);
-			dt = timestep;
+			double dt = this->timestep;
+			double inputTimestep = 0.0;
+			if (this->Properties()->Get("timestep", inputTimestep))
+			{
+				if (std::isfinite(inputTimestep) && inputTimestep > 0.0)
+				{
+					dt = inputTimestep;
+				}
+				else
+				{
+					std::cout << "# WARNING: undefined timestep, using by default 0.1 ns!" << std::endl;
+					this->Log() << "# WARNING: undefined timestep, using by default 0.1 ns!" << std::endl;
+					dt = 0.1;
+				}
+			}
 
-			if (dt > std::pow(2, -53))
-			{
-				this->Log() << "Time step is chosen as " << dt << " ns." << std::endl;
-			}
-			else
-			{
-				this->Log() << "Time step is undefined. Using the default." << std::endl;
-				std::cout << "# ERROR: undefined time step! Using the default of 1 ns." << std::endl;
-				dt = 1;
-				this->Log() << "Time step is chosen as " << dt << " ns." << std::endl;
-			}
+			this->Log() << "Time step is chosen as " << dt << " ns." << std::endl;
 
 			// Number of time propagation steps
 			int num_steps = std::ceil(totaltime / dt);
@@ -410,7 +423,11 @@ namespace RunSection
 
 			// Powder averaging options (shared keywords with superspace powder task)
 			std::string Method = "timeevo";
-			this->Properties()->Get("method", Method);
+			if (!this->Properties()->Get("method", Method))
+			{
+				this->Log() << "Failed to obtain an input for a Method. Please specify method = timeinf or method = timeevo. Using timeevo by default." << std::endl;
+				Method = "timeevo";
+			}
 			bool method_timeevo = Method.compare("timeevo") == 0;
 			bool method_timeinf = Method.compare("timeinf") == 0;
 			if (!method_timeevo && !method_timeinf)
@@ -421,29 +438,24 @@ namespace RunSection
 				method_timeinf = false;
 			}
 
-			int numPoints = 1;
-			this->Properties()->Get("powdersamplingpoints", numPoints);
+			int numPoints = 1000;
+			if (!this->Properties()->Get("powdersamplingpoints", numPoints))
+			{
+				this->Log() << "Failed to obtain an input for a number of sampling points. Plese use powdersamplingpoints = N. Using powdersamplingpoints = 1000 by default. " << std::endl;
+			}
 			if (numPoints < 1)
 			{
 				numPoints = 1;
 			}
 
-			bool powderAverage = numPoints > 1;
 			std::vector<std::tuple<double, double, double>> grid;
-			if (powderAverage)
+			if (!this->CreateUniformGrid(numPoints, grid))
 			{
-				if (!this->CreateUniformGrid(numPoints, grid))
-				{
-					this->Log() << "Failed to obtain a powder grid." << std::endl;
-				}
-				else
-				{
-					this->Log() << "Using powder averaging with " << numPoints << " orientations." << std::endl;
-				}
+				this->Log() << "Failed to obtain a powder grid." << std::endl;
 			}
-			else
+			else if (numPoints > 1)
 			{
-				grid.emplace_back(0.0, 0.0, 1.0);
+				this->Log() << "Using powder averaging with " << numPoints << " orientations." << std::endl;
 			}
 
 			std::vector<std::string> HamiltonianH0list;
@@ -488,13 +500,10 @@ namespace RunSection
 				std::tie(theta, phi, weight) = grid_point;
 
 				arma::mat Rot_mat = arma::eye<arma::mat>(3, 3);
-				if (powderAverage)
+				double gamma = 0.0;
+				if (!this->CreateRotationMatrix(gamma, theta, phi, Rot_mat))
 				{
-					double gamma = 0.0;
-					if (!this->CreateRotationMatrix(gamma, theta, phi, Rot_mat))
-					{
-						this->Log() << "Failed to obtain rotation matrix for powder orientation." << std::endl;
-					}
+					this->Log() << "Failed to obtain rotation matrix for powder orientation." << std::endl;
 				}
 
 				arma::sp_cx_mat H;
@@ -808,7 +817,10 @@ namespace RunSection
 
 			// Propagate the system in time using the specified method and write results
 			bool integration = false;
-			this->Properties()->Get("integration", integration);
+			if (!this->Properties()->Get("integration", integration))
+			{
+				this->Log() << "Failed to obtain an input for an integtation. Plese use integration = true/false. Using integration = false by default. " << std::endl;
+			}
 
 			if (method_timeinf)
 			{
@@ -830,16 +842,34 @@ namespace RunSection
 			{
 				this->Log() << "Writing integrated polarisation over time." << std::endl;
 
-				arma::mat ans = arma::trapz(time, ExptValues);
+				arma::mat integrated;
+				integrated.zeros(num_steps, projection_counter);
 
-				this->Data() << this->RunSettings()->CurrentStep() << " ";
-				this->WriteStandardOutput(this->Data());
-
-				for (int idx = 0; idx < projection_counter; idx++)
+				for (int k = 1; k < num_steps; ++k)
 				{
-					this->Data() << std::setprecision(12) << ans(0, idx) << " ";
+					for (int idx = 0; idx < projection_counter; ++idx)
+					{
+						integrated(k, idx) = integrated(k - 1, idx) + dt * (ExptValues(k - 1, idx) + ExptValues(k, idx)) / 2.0;
+					}
 				}
-				this->Data() << std::endl;
+
+				if (num_steps > 0)
+				{
+					integrated.row(0) = ExptValues.row(0);
+				}
+
+				for (int k = 0; k < num_steps; k++)
+				{
+					this->Data() << this->RunSettings()->CurrentStep() << " ";
+					this->Data() << time(k) << " ";
+					this->WriteStandardOutput(this->Data());
+
+					for (int idx = 0; idx < projection_counter; idx++)
+					{
+						this->Data() << " " << integrated(k, idx);
+					}
+					this->Data() << std::endl;
+				}
 			}
 			else if (propmethod == "autoexpm" || propmethod == "krylov")
 			{

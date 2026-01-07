@@ -31,6 +31,7 @@ using test_case = std::pair<std::string, test_ptr>; // Function pointer and name
 #include "tests_TaskStaticSS.cpp"
 #include "tests_TaskStaticRPOnlyHSSymDec.cpp"
 #include "tests_TaskStaticSSSpectra.cpp"
+#include "tests_TaskStaticPowderSpectra.cpp"
 #include "tests_utility.cpp"
 //////////////////////////////////////////////////////////////////////////////
 // A simple test to test the test module itself
@@ -65,6 +66,7 @@ int main(int argc, char **argv)
 	AddTaskStaticSSTests(cases);
 	AddTaskStaticRPOnlyHSSymDecTests(cases);
 	AddTaskStaticSSSpectraTests(cases);
+	AddTaskStaticPowderSpectraTests(cases);
 	AddUtiltiyTests(cases);
 	
 
