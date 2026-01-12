@@ -2,5 +2,5 @@ No propagator defined, using the default propogator (RK45)
 --- Running task "main" ---
 Running method StaticSSTimeEvolution.
 Ready to perform calculation.
-
-Done with calculations!
+Using exponential propogator
+Calculating the propagator...

@@ -1104,7 +1104,15 @@ namespace SpinAPI
 		arma::sp_cx_mat result;
 
 		//obtain number of orientations per each interaction
-		int samples = interactions.size();
+		int samples = 0;
+		for(auto i = interactions.begin(); i != interactions.cend(); i++)
+		{
+			if(!(*i)->IsValid())
+			{
+				continue;
+			}
+			samples += 1;
+		}
 		int* ori = (int*)malloc(samples * sizeof(int));
 		for (auto i = interactions.begin(); i != interactions.cend(); i++)
 		{
@@ -1128,6 +1136,10 @@ namespace SpinAPI
 		int op = 0;
 		for(auto i = interactions.begin(); i != interactions.cend(); i++)
 		{
+			if(!(*i)->IsValid())
+			{
+				continue;
+			}
 			if(!this->InteractionOperator((*i), tmp))
 			{
 				return false;

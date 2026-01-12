@@ -121,10 +121,10 @@ MCSpherePoint* CalculateMCSpherePoints(int n, double rmax_x, double rmax_y, doub
         SCData container;
         arma::sp_cx_mat H = CompositeMatrix.submat(0,0,Dimension-1,Dimension-1);
         arma::sp_cx_mat SampleMatrix = CompositeMatrix.submat(Dimension,0,CompositeMatrix.n_rows-1,CompositeMatrix.n_cols-1);
-        for (unsigned int i = 0; i < CompositeMatrix.n_rows - Dimension; i += Dimension)
+        for (unsigned int i = 0; i < SampleMatrix.n_rows; i += Dimension)
         {
             int samples = 0;
-            for (unsigned int e = 0; e < CompositeMatrix.n_cols; e+= Dimension)
+            for (unsigned int e = 0; e < SampleMatrix.n_cols; e+= Dimension)
             {
                 arma::sp_cx_mat SubMat = SampleMatrix.submat(i,e,i+Dimension-1,e+Dimension-1);
                 if(SubMat.n_nonzero == 0)

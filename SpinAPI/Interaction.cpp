@@ -683,7 +683,7 @@ namespace SpinAPI
 			return true;
 		else if (this->type == InteractionType::Zfs && !this->group1.empty())
 			return true;
-		else if (this->type == InteractionType::SemiClassicalField && !this->group1.empty())
+		else if (this->type == InteractionType::SemiClassicalField && !this->group1.empty() && !this->hffield.empty())
 			return true;		
 
 		return false;
