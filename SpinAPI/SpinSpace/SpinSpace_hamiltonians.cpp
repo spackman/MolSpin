@@ -623,7 +623,7 @@ namespace SpinAPI
 				double area = 0;
 				std::vector<double> spacing;
 				std::vector<double> spacingcheck;
-				for(int k = 0; k < weights.size(); k++)
+				for(unsigned int k = 0; k < weights.size(); k++)
 				{
 					if(k < weights.size()-1)
 						spacingcheck.push_back(std::abs(weights[k+1].first.second - weights[k].first.second));

@@ -937,7 +937,7 @@ namespace SpinAPI
 						for(index = 0; index < 3; index++)
 						{
 							if(skip[index]) continue;
-							if(i2 == tensorTypeLengths[index])
+							if(i2 == (size_t)tensorTypeLengths[index])
 							{
 								skip[index] = true;
 								continue;
@@ -1062,8 +1062,7 @@ namespace SpinAPI
 			}
 			i++;
 		}
-		int numvalues = tensorvalues.size();
-		auto PrintError = [&tensorvalues](int num)
+		auto PrintError = [&tensorvalues](unsigned int num)
 		{
 			if(tensorvalues.size() != num)
 			{

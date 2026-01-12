@@ -262,13 +262,13 @@ namespace RunSection
 			sampleHSC.push_back(i.SamplesMatrix);
 		}
 		Combinations = GenerateCombinationsNI(samples);
-		for(int i = 0; i < Combinations.size(); i++)
+		for(unsigned int i = 0; i < Combinations.size(); i++)
 		{
 			H.push_back(GetHamiltonian(A,ori.size(),sampleHSC,Combinations[i]));
 			std::vector<double> weights;
-			for(int j = 0; j < Combinations[i].size(); j++)
+			for(unsigned int j = 0; j < Combinations[i].size(); j++)
 			{
-				for(int k = 0; k < Combinations[i][j].size(); k++)
+				for(unsigned int k = 0; k < Combinations[i][j].size(); k++)
 				{
 					weights.push_back(AllWeights[j][k][Combinations[i][j][k]]);
 				}
@@ -374,7 +374,7 @@ namespace RunSection
 		};
 
 		std::vector<Trapezium> trapezia;
-		for(int i = 0; i < rhoweights.size(); i++)
+		for(unsigned int i = 0; i < rhoweights.size(); i++)
 		{
 			slice.push_back(rhoweights[i].second);
 			sliceV.push_back(rhoSC[i].second);
@@ -382,7 +382,7 @@ namespace RunSection
 		//first create all the 2d trapezia
 		int sample = 0;
 		int index = 0; 
-		for(int i = 0; i <= slice.size()-1; i++)
+		for(unsigned int i = 0; i <= slice.size()-1; i++)
 		{
 			if ((index+1) % props.numSamples[dimensions-1] == 0 && i != 0)
 			{
@@ -427,7 +427,7 @@ namespace RunSection
 
 		std::vector<Trapezium> NewTrapezia;
 		std::vector<Trapezium> TempTrapezia;
-		for(int i = 0; i < trapezia.size(); i++)
+		for(unsigned int i = 0; i < trapezia.size(); i++)
 		{
 			if(i % samplesize == 0 && i != 0)
 			{
@@ -457,13 +457,13 @@ namespace RunSection
 			std::vector<Trapezium> NewTrapezia;
 			std::vector<Trapezium> TempTrapezia;
 			int ss= samples[0]-1;
-			for(int i = 0; i <= trapezia.size(); i++)
+			for(unsigned int i = 0; i <= trapezia.size(); i++)
 			{
 				if(i % (ss+1) == 0 && i != 0)
 				{	
 					double vol = 0;
 					arma::cx_vec V = result;
-					for(int e = 0; e < TempTrapezia.size()-1; e++)
+					for(unsigned int e = 0; e < TempTrapezia.size()-1; e++)
 					{
 						double gap = stepsizes[depth][e+1] - stepsizes[depth][e];
 						Trapezium t2;
@@ -504,7 +504,6 @@ namespace RunSection
 		double totalIntegral = 0.0;
 		arma::cx_vec totalVec = result;
 		index = 0;
-		double tot = 0.0;
 		for(auto t : trapezia)
 		{
 			totalIntegral += t.value;
