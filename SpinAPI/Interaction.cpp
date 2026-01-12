@@ -105,81 +105,155 @@ namespace SpinAPI
 				this->orientations = inorientationsvalue;
 				std::string HFfieldStr;
 				this->Properties()->Get("hyperfinefield",HFfieldStr);
-				std::vector<std::tuple<double,int,double>> HFfield;
+				std::vector<std::tuple<SCMatrix3x3, int, double>> HFfield;
 				bool InTuple = false;
 				int element = 0;
 				std::string CurrentString;
-				std::tuple<double,int,double> CurrentTuple = {-1.0, -1, -1.0};
+				SCMatrix3x3 ZeroTensor = {{{0.0,0.0,0.0},{0.0,0.0,0.0},{0.0,0.0,0.0}}};
+				std::tuple<SCMatrix3x3,int,double> CurrentHfTensor = std::make_tuple(ZeroTensor,-1,-1.0); //{{{0.0,0.0,0.0},{0.0,0.0,0.0},{0.0,0.0,0.0}}, -1, -1.0};
 				auto c = HFfieldStr.begin();
+				int depth = 0;
+				int validelements = 0;
 				while(c != HFfieldStr.end())
 				{
 					if((*c) == '(' || (*c) == ')')
 					{
-						InTuple = !InTuple;
+						if((*c) == '(')
+						{
+							depth += 1;
+							if(depth == 1)
+							{
+								InTuple = true;
+								CurrentString = "";
+							}
+							else
+							{
+								CurrentString += (*c);
+							}
+						}
+						else
+						{
+							depth -= 1;
+							if(depth == 0)
+							{
+								InTuple = false;
+							}
+							else
+							{
+								CurrentString += (*c);
+							}
+						}
 						if(!InTuple && CurrentString != "")
 						{
 							c = c - 1;
 							(*c) = ',';
 							InTuple = true;
+							depth = 1;
 							continue;
 						}
-						CurrentString = "";
-						if(!InTuple && element < 3)
+						if(!InTuple && validelements < 3)
 						{
-							std::cout << "[INFO]: Not enough elements in hyperfine field definition for the semi classical interaction." << this->Name();
-							auto[a,n,s] = CurrentTuple;
-							std::cout << " Ignoring the field defined as: " << a << " , " << n << " , " << s << ". -1 is just used as a placeholder value " << std::endl;
-							CurrentTuple = {-1.0,-1,-1.0};
+							std::cout << "[INFO]: Not enough valid elements in hyperfine field definition for the semi classical interaction." << this->Name();
+							auto[a,n,s] = CurrentHfTensor;
+							std::cout << " Ignoring the field defined as: " << a << " , " << n << " , " << s << "\n -1 is just used as a placeholder value " << std::endl;
+							CurrentHfTensor = std::make_tuple(ZeroTensor,-1,-1.0);
+							validelements = 0;
 						}
-						if(!InTuple && element == 3)
+						if(!InTuple && validelements == 3)
 						{
-							HFfield.push_back(CurrentTuple);
-							CurrentTuple = {-1.0,-1,-1.0};
+							HFfield.push_back(CurrentHfTensor);
+							CurrentHfTensor = std::make_tuple(ZeroTensor,-1,-1.0);
+							validelements = 0;
 						}
 						element = 0;
-						c++;
-						continue;
+						c++;	
 					}
 					if(!InTuple && (*c) == ',')
 					{
 						c++;
 						continue;
 					}
-					if(InTuple && ((*c) != ',' && (*c) != ' '))
+					if(!InTuple && (*c) == ' ')
 					{
-						CurrentString += (*c);
 						c++;
 						continue;
 					}
-					if(InTuple && (*c) == ',')
+					if(InTuple)
 					{
-						//evaluate string
-						if(element == 0)
+						//depth check i.e if depth is 2 we are in tensor
+						if(depth == 2)
 						{
-							double ampl = std::stod(CurrentString);
-							std::get<0>(CurrentTuple) = ampl;
+							CurrentString += (*c);
 						}
-						else if(element == 1)
+						else if((*c) != ',' && (*c) != ' ')
 						{
-							int num = std::stoi(CurrentString);
-							std::get<1>(CurrentTuple) = num;
+							CurrentString += (*c);
 						}
-						else if(element == 2)
+						if(depth == 1 && (*c) == ',')
 						{
-							double sn = std::stod(CurrentString);
-							std::get<2>(CurrentTuple) = sn;
+							//evaluate strings
+							if (element == 0)
+							{
+								//parse tensor
+								SCMatrix3x3 parsedtensor;
+								bool valid = Parse3x3TensorLikeArrayFromString(CurrentString, parsedtensor);
+								std::get<0>(CurrentHfTensor) = parsedtensor;
+								if(valid)
+								{
+									validelements += 1;
+								}
+							}
+							else if(element == 1)
+							{
+								int num = std::stoi(CurrentString);
+								std::get<1>(CurrentHfTensor) = num;
+								validelements += 1;
+							}
+							else if(element == 2)
+							{
+
+								auto frac = [](std::string str)
+								{
+									std::string p1,p2;
+									std::string* cstr = &p1;
+									auto c2 = str.begin();
+									while (c2 != str.end())
+									{
+										if((*c2) == '/' || (*c2) == '\\')
+										{
+											cstr = &p2;
+											c2++;
+											continue;
+										}
+										(*cstr) += (*c2);
+										c2++;
+									}
+									return std::stod(p1) / std::stod(p2);
+
+								};
+								double sn = 0.0;
+								if(std::find(CurrentString.begin(), CurrentString.end(), '/') != CurrentString.end())
+								{
+									sn = frac(CurrentString);
+								}
+								else
+								{
+									sn = std::stod(CurrentString);
+								}
+								std::get<2>(CurrentHfTensor) = sn;
+								validelements += 1;
+							}
+							else
+							{
+								std::cout << "[INFO]: Too many elements in hyperfine field definition for the semi classical interaction " << this->Name() << " ignoring value: " << CurrentString << std::endl;
+							}
+							CurrentString = "";
+							element += 1;
+							c++;
+							continue;
 						}
-						else
-						{
-							std::cout << "[INFO]: Too many elements in hyperfine field definition for the semi classical interaction " << this->Name() << " ignoring value: " << CurrentString << std::endl;
-						}
-						CurrentString = "";
-						element += 1;
 						c++;
-						continue;
 					}
-					c++;
-					 
 				}
 				this->hffield = HFfield;
 
@@ -484,6 +558,14 @@ namespace SpinAPI
 			}
 		}
 	}
+
+	std::ostream &operator<<(std::ostream& stream, const SCMatrix3x3& mat)
+    {
+        stream << "\n[[" << mat[0][0] << ", " << mat[0][1] << ", " << mat[0][2] << "]\n "
+			   << "[" << mat[1][0] << ", " << mat[1][1] << ", " << mat[1][2] << "]\n "
+			   << "[" << mat[2][0] << ", " << mat[2][1] << ", " << mat[2][2] << "]]\n";
+		return stream;
+    }
 
 	Interaction::Interaction(const Interaction &_interaction) : properties(_interaction.properties), couplingTensor(_interaction.couplingTensor), field(_interaction.field), dvalue(_interaction.dvalue), evalue(_interaction.evalue), hffield(_interaction.hffield), orientations(_interaction.orientations),
 																group1(_interaction.group1), group2(_interaction.group2), type(_interaction.type), fieldType(_interaction.fieldType),
@@ -1447,7 +1529,7 @@ namespace SpinAPI
 			int N = n;
 			for(int i = 0; i < N; i++)
 			{
-				double bondlength = a * std::sqrt(sn * (sn+1));
+				double bondlength = a[0][0] * std::sqrt(sn * (sn+1));
 				BondLengths.push_back(bondlength);
 				tau_sum.push_back(std::pow(bondlength,2));
 			}

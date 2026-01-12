@@ -23,7 +23,7 @@
 
 namespace SpinAPI
 {
-	typedef std::tuple<double,int,double> SCHyperfineField;
+	typedef std::tuple<SCMatrix3x3,int,double> SCHyperfineField;
 	typedef std::function<double (std::array<double,3>)> SCDistributionF;
 
 	enum class SCDistribution
@@ -31,6 +31,9 @@ namespace SpinAPI
 		FJC = 0, //Freely jointed chain
 		DEFUALT //is FJC
 	};
+
+	std::ostream &operator<<(std::ostream&, const SCMatrix3x3&);
+	
 	class Interaction
 	{
 	private:
