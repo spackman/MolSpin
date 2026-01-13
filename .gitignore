@@ -32,6 +32,7 @@ msd-files/
 *.out
 python/
 *.txt
+__pycache__/
 
 #ignore vscode workspase files
 MolSpin.code-workspace
