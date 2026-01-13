@@ -7,6 +7,7 @@
 /////////////////////////////////////////////////////////////////////////
 #include <iostream>
 #include <iomanip>
+#include <utility>
 #include "TaskStaticSSSpectra.h"
 #include "Transition.h"
 #include "Settings.h"
@@ -239,6 +240,9 @@ namespace RunSection
 				this->Log() << "Failed to obtain an input for a CIDSP. Plese use cidsp = true/false. Using cidsp = false by default. " << std::endl;
 			}
 
+			ProjectionCache projection_cache;
+			this->BuildProjectionCache(*i, space, CIDSP, projection_cache, this->Log());
+
 			// Read printtimeframe from the input file
 			std::string Timewindow;
 			if (!this->Properties()->Get("printtimeframe", Timewindow))
@@ -337,7 +341,7 @@ namespace RunSection
 
 									if (Timewindow.compare("freeevo") != 0)
 									{
-										if (!this->ProjectAndPrintOutputLine(i, space, rhovec, Printedtime, (*pulse)->Timestep(), n, CIDSP, this->Data(), this->Log()))
+										if (!this->ProjectAndPrintOutputLine(i, space, projection_cache, rhovec, Printedtime, (*pulse)->Timestep(), n, CIDSP, this->Data(), this->Log()))
 											this->Log() << "Could not project the state vector and print the result into a file" << std::endl;
 									}
 								}
@@ -395,7 +399,7 @@ namespace RunSection
 
 									if (Timewindow.compare("freeevo") != 0)
 									{
-										if (!this->ProjectAndPrintOutputLine(i, space, rhovec, Printedtime, (*pulse)->Timestep(), n, CIDSP, this->Data(), this->Log()))
+										if (!this->ProjectAndPrintOutputLine(i, space, projection_cache, rhovec, Printedtime, (*pulse)->Timestep(), n, CIDSP, this->Data(), this->Log()))
 											this->Log() << "Could not project the state vector and print the result into a file" << std::endl;
 									}
 
@@ -480,7 +484,7 @@ namespace RunSection
 
 									if (Timewindow.compare("freeevo") != 0)
 									{
-										if (!this->ProjectAndPrintOutputLine(i, space, rhovec, Printedtime, (*pulse)->Timestep(), n, CIDSP, this->Data(), this->Log()))
+										if (!this->ProjectAndPrintOutputLine(i, space, projection_cache, rhovec, Printedtime, (*pulse)->Timestep(), n, CIDSP, this->Data(), this->Log()))
 											this->Log() << "Could not project the state vector and print the result into a file" << std::endl;
 									}
 
@@ -535,7 +539,7 @@ namespace RunSection
 
 									if (Timewindow.compare("freeevo") != 0)
 									{
-										if (!this->ProjectAndPrintOutputLine(i, space, rhovec, Printedtime, (*pulse)->Timestep(), n, CIDSP, this->Data(), this->Log()))
+										if (!this->ProjectAndPrintOutputLine(i, space, projection_cache, rhovec, Printedtime, (*pulse)->Timestep(), n, CIDSP, this->Data(), this->Log()))
 											this->Log() << "Could not project the state vector and print the result into a file" << std::endl;
 									}
 								}
@@ -573,7 +577,7 @@ namespace RunSection
 
 				if (Timewindow.compare("pulse") != 0)
 				{
-					if (!this->ProjectAndPrintOutputLineInf(i, space, rhovec, Printedtime, this->timestep, CIDSP, this->Data(), this->Log()))
+					if (!this->ProjectAndPrintOutputLineInf(i, space, projection_cache, rhovec, Printedtime, this->timestep, CIDSP, this->Data(), this->Log()))
 						this->Log() << "Could not project the state vector and print the result into a file" << std::endl;
 				}
 
@@ -647,7 +651,7 @@ namespace RunSection
 
 						if (Timewindow.compare("pulse") != 0)
 						{
-							if (!this->ProjectAndPrintOutputLine(i, space, rhovec, Printedtime, this->timestep, n, CIDSP, this->Data(), this->Log()))
+							if (!this->ProjectAndPrintOutputLine(i, space, projection_cache, rhovec, Printedtime, this->timestep, n, CIDSP, this->Data(), this->Log()))
 								this->Log() << "Could not project the state vector and print the result into a file" << std::endl;
 						}
 
@@ -825,8 +829,85 @@ namespace RunSection
 		return ReturnVec;
 	}
 
-	bool TaskStaticSSSpectra::ProjectAndPrintOutputLine(auto &_i, SpinAPI::SpinSpace &_space, arma::cx_vec &_rhovec, double &_printedtime, double _timestep, unsigned int &_n, bool &_cidsp, std::ostream &_datastream, std::ostream &_logstream)
+	bool TaskStaticSSSpectra::BuildProjectionCache(const SpinAPI::system_ptr &_system, SpinAPI::SpinSpace &_space, bool _cidsp, ProjectionCache &_cache, std::ostream &_log_stream)
 	{
+		_cache = ProjectionCache{};
+
+		std::vector<std::string> spinList;
+		_cache.has_spinlist = this->Properties()->GetList("spinlist", spinList, ',');
+		if (!_cache.has_spinlist)
+		{
+			return false;
+		}
+
+		_cache.spin_Ix.reserve(spinList.size());
+		_cache.spin_Iy.reserve(spinList.size());
+		_cache.spin_Iz.reserve(spinList.size());
+
+		for (auto l = _system->spins_cbegin(); l != _system->spins_cend(); l++)
+		{
+			for (const auto &spin_name : spinList)
+			{
+				if ((*l)->Name() == spin_name)
+				{
+					arma::cx_mat Iprojx;
+					arma::cx_mat Iprojy;
+					arma::cx_mat Iprojz;
+
+					if (!_space.CreateOperator(arma::conv_to<arma::cx_mat>::from((*l)->Sx()), (*l), Iprojx))
+					{
+						return false;
+					}
+
+					if (!_space.CreateOperator(arma::conv_to<arma::cx_mat>::from((*l)->Sy()), (*l), Iprojy))
+					{
+						return false;
+					}
+
+					if (!_space.CreateOperator(arma::conv_to<arma::cx_mat>::from((*l)->Sz()), (*l), Iprojz))
+					{
+						return false;
+					}
+
+					_cache.spin_Ix.push_back(std::move(Iprojx));
+					_cache.spin_Iy.push_back(std::move(Iprojy));
+					_cache.spin_Iz.push_back(std::move(Iprojz));
+				}
+			}
+		}
+
+		if (_cidsp)
+		{
+			auto transitions = _system->Transitions();
+			_cache.transition_proj.reserve(transitions.size());
+			_cache.transition_rates.reserve(transitions.size());
+
+			for (auto j = transitions.cbegin(); j != transitions.cend(); j++)
+			{
+				// Make sure that there is a state object
+				if ((*j)->SourceState() == nullptr)
+					continue;
+
+				arma::cx_mat P;
+				if (!_space.GetState((*j)->SourceState(), P))
+				{
+					_log_stream << "Failed to obtain projection matrix onto state \"" << (*j)->Name() << "\" of SpinSystem \"" << _system->Name() << "\"." << std::endl;
+					continue;
+				}
+
+				_cache.transition_proj.push_back(std::move(P));
+				_cache.transition_rates.push_back((*j)->Rate());
+			}
+		}
+
+		_cache.ready = true;
+		return true;
+	}
+
+	bool TaskStaticSSSpectra::ProjectAndPrintOutputLine(auto &_i, SpinAPI::SpinSpace &_space, const ProjectionCache &_cache, arma::cx_vec &_rhovec, double &_printedtime, double _timestep, unsigned int &_n, bool &_cidsp, std::ostream &_datastream, std::ostream &_logstream)
+	{
+		(void)_i;
+
 		arma::cx_mat rho0;
 
 		// Convert the resulting density operator back to its Hilbert space representation
@@ -835,13 +916,6 @@ namespace RunSection
 			_logstream << "Failed to convert resulting superspace-vector back to native Hilbert space." << std::endl;
 			return false;
 		}
-
-		// Get nuclei of interest for CIDNP spectrum
-		arma::cx_mat Iprojx;
-		arma::cx_mat Iprojy;
-		arma::cx_mat Iprojz;
-
-		std::vector<std::string> spinList;
 
 		if (_n == 0)
 			_logstream << "CIDSP = " << _cidsp << std::endl;
@@ -852,74 +926,41 @@ namespace RunSection
 		_datastream << std::setprecision(12) << _printedtime + (_n * _timestep) << " ";
 		this->WriteStandardOutput(_datastream);
 
-		if (this->Properties()->GetList("spinlist", spinList, ','))
+		if (!_cache.has_spinlist)
 		{
+			if (_n == 0)
+				_logstream << "No nucleus was specified for projection" << std::endl;
+			return false;
+		}
 
-			for (auto l = (*_i)->spins_cbegin(); l != (*_i)->spins_cend(); l++)
+		if (!_cache.ready)
+		{
+			return false;
+		}
+
+		// There are two result modes - either write results per transition if CIDSP is true or for each defined state if CIDSP is false.
+		if (_cidsp == true)
+		{
+			for (size_t s = 0; s < _cache.spin_Ix.size(); ++s)
 			{
-				for (int m = 0; m < (int)spinList.size(); m++)
+				for (size_t t = 0; t < _cache.transition_proj.size(); ++t)
 				{
-					if ((*l)->Name() == spinList[m])
-					{
-						if (!_space.CreateOperator(arma::conv_to<arma::cx_mat>::from((*l)->Sx()), (*l), Iprojx))
-						{
-							return false;
-						}
-
-						if (!_space.CreateOperator(arma::conv_to<arma::cx_mat>::from((*l)->Sy()), (*l), Iprojy))
-						{
-							return false;
-						}
-
-						if (!_space.CreateOperator(arma::conv_to<arma::cx_mat>::from((*l)->Sz()), (*l), Iprojz))
-						{
-							return false;
-						}
-
-
-						arma::cx_mat P;
-
-						// There are two result modes - either write results per transition  if CIDSP is true or for each defined state if CIDSP is false
-
-						if (_cidsp == true)
-						{
-							// Loop through all defind transitions
-							auto transitions = (*_i)->Transitions();
-							for (auto j = transitions.cbegin(); j != transitions.cend(); j++)
-							{
-								// Make sure that there is a state object
-								if ((*j)->SourceState() == nullptr)
-									continue;
-
-								if ((!_space.GetState((*j)->SourceState(), P)) && (_n == 0))
-								{
-									_logstream << "Failed to obtain projection matrix onto state \"" << (*j)->Name() << "\" of SpinSystem \"" << (*_i)->Name() << "\"." << std::endl;
-									continue;
-								}
-
-
-								// Return the yield for this transition
-								_datastream << std::real(arma::trace(Iprojx * (*j)->Rate() * P * rho0)) << " ";
-								_datastream << std::real(arma::trace(Iprojy * (*j)->Rate() * P * rho0)) << " ";
-								_datastream << std::real(arma::trace(Iprojz * (*j)->Rate() * P * rho0)) << " ";
-							}
-						}
-						else if (_cidsp == false)
-						{
-							// Return the yield for this state - note that no reaction rates are included here.
-							_datastream << std::real(arma::trace(Iprojx * rho0)) << " ";
-							_datastream << std::real(arma::trace(Iprojy * rho0)) << " ";
-							_datastream << std::real(arma::trace(Iprojz * rho0)) << " ";
-						}
-					}
+					const double rate = _cache.transition_rates[t];
+					const arma::cx_mat &P = _cache.transition_proj[t];
+					_datastream << std::real(arma::trace(_cache.spin_Ix[s] * rate * P * rho0)) << " ";
+					_datastream << std::real(arma::trace(_cache.spin_Iy[s] * rate * P * rho0)) << " ";
+					_datastream << std::real(arma::trace(_cache.spin_Iz[s] * rate * P * rho0)) << " ";
 				}
 			}
 		}
 		else
 		{
-			if (_n == 0)
-				_logstream << "No nucleus was specified for projection" << std::endl;
-			return false;
+			for (size_t s = 0; s < _cache.spin_Ix.size(); ++s)
+			{
+				_datastream << std::real(arma::trace(_cache.spin_Ix[s] * rho0)) << " ";
+				_datastream << std::real(arma::trace(_cache.spin_Iy[s] * rho0)) << " ";
+				_datastream << std::real(arma::trace(_cache.spin_Iz[s] * rho0)) << " ";
+			}
 		}
 
 		_datastream << std::endl;
@@ -927,8 +968,10 @@ namespace RunSection
 		return true;
 	}
 
-	bool TaskStaticSSSpectra::ProjectAndPrintOutputLineInf(auto &_i, SpinAPI::SpinSpace &_space, arma::cx_vec &_rhovec, double &_printedtime, double _timestep, bool &_cidsp, std::ostream &_datastream, std::ostream &_logstream)
+	bool TaskStaticSSSpectra::ProjectAndPrintOutputLineInf(auto &_i, SpinAPI::SpinSpace &_space, const ProjectionCache &_cache, arma::cx_vec &_rhovec, double &_printedtime, double _timestep, bool &_cidsp, std::ostream &_datastream, std::ostream &_logstream)
 	{
+		(void)_i;
+
 		arma::cx_mat rho0;
 
 		// Convert the resulting density operator back to its Hilbert space representation
@@ -938,13 +981,6 @@ namespace RunSection
 			return false;
 		}
 
-		// Get nuclei of interest for CIDNP spectrum
-		arma::cx_mat Iprojx;
-		arma::cx_mat Iprojy;
-		arma::cx_mat Iprojz;
-
-		std::vector<std::string> spinList;
-
 		_logstream << "CIDSP = " << _cidsp << std::endl;
 
 		// Save the current step
@@ -953,71 +989,40 @@ namespace RunSection
 		_datastream << "inf" << " ";
 		this->WriteStandardOutput(_datastream);
 
-		if (this->Properties()->GetList("spinlist", spinList, ','))
+		if (!_cache.has_spinlist)
 		{
+			_logstream << "No nucleus was specified for projection" << std::endl;
+			return false;
+		}
 
-			for (auto l = (*_i)->spins_cbegin(); l != (*_i)->spins_cend(); l++)
+		if (!_cache.ready)
+		{
+			return false;
+		}
+
+		// There are two result modes - either write results per transition if CIDSP is true or for each defined state if CIDSP is false.
+		if (_cidsp == true)
+		{
+			for (size_t s = 0; s < _cache.spin_Ix.size(); ++s)
 			{
-				for (int m = 0; m < (int)spinList.size(); m++)
+				for (size_t t = 0; t < _cache.transition_proj.size(); ++t)
 				{
-					if ((*l)->Name() == spinList[m])
-					{
-						if (!_space.CreateOperator(arma::conv_to<arma::cx_mat>::from((*l)->Sx()), (*l), Iprojx))
-						{
-							return false;
-						}
-
-						if (!_space.CreateOperator(arma::conv_to<arma::cx_mat>::from((*l)->Sy()), (*l), Iprojy))
-						{
-							return false;
-						}
-
-						if (!_space.CreateOperator(arma::conv_to<arma::cx_mat>::from((*l)->Sz()), (*l), Iprojz))
-						{
-							return false;
-						}
-
-						arma::cx_mat P;
-
-						// There are two result modes - either write results per transition  if CIDSP is true or for each defined state if CIDSP is false
-
-						if (_cidsp == true)
-						{
-							// Loop through all defind transitions
-							auto transitions = (*_i)->Transitions();
-							for (auto j = transitions.cbegin(); j != transitions.cend(); j++)
-							{
-								// Make sure that there is a state object
-								if ((*j)->SourceState() == nullptr)
-									continue;
-
-								if ((!_space.GetState((*j)->SourceState(), P)))
-								{
-									_logstream << "Failed to obtain projection matrix onto state \"" << (*j)->Name() << "\" of SpinSystem \"" << (*_i)->Name() << "\"." << std::endl;
-									continue;
-								}
-
-								// Return the yield for this transition
-								_datastream << std::real(arma::trace(Iprojx * (*j)->Rate() * P * rho0)) << " ";
-								_datastream << std::real(arma::trace(Iprojy * (*j)->Rate() * P * rho0)) << " ";
-								_datastream << std::real(arma::trace(Iprojz * (*j)->Rate() * P * rho0)) << " ";
-							}
-						}
-						else if (_cidsp == false)
-						{
-							// Return the yield for this state - note that no reaction rates are included here.
-							_datastream << std::real(arma::trace(Iprojx * rho0)) << " ";
-							_datastream << std::real(arma::trace(Iprojy * rho0)) << " ";
-							_datastream << std::real(arma::trace(Iprojz * rho0)) << " ";
-						}
-					}
+					const double rate = _cache.transition_rates[t];
+					const arma::cx_mat &P = _cache.transition_proj[t];
+					_datastream << std::real(arma::trace(_cache.spin_Ix[s] * rate * P * rho0)) << " ";
+					_datastream << std::real(arma::trace(_cache.spin_Iy[s] * rate * P * rho0)) << " ";
+					_datastream << std::real(arma::trace(_cache.spin_Iz[s] * rate * P * rho0)) << " ";
 				}
 			}
 		}
 		else
 		{
-			_logstream << "No nucleus was specified for projection" << std::endl;
-			return false;
+			for (size_t s = 0; s < _cache.spin_Ix.size(); ++s)
+			{
+				_datastream << std::real(arma::trace(_cache.spin_Ix[s] * rho0)) << " ";
+				_datastream << std::real(arma::trace(_cache.spin_Iy[s] * rho0)) << " ";
+				_datastream << std::real(arma::trace(_cache.spin_Iz[s] * rho0)) << " ";
+			}
 		}
 
 		return true;
