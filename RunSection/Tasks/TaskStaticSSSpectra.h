@@ -32,6 +32,8 @@ namespace RunSection
 			std::vector<arma::cx_mat> spin_Ix;
 			std::vector<arma::cx_mat> spin_Iy;
 			std::vector<arma::cx_mat> spin_Iz;
+			std::vector<arma::cx_mat> spin_Ip;
+			std::vector<arma::cx_mat> spin_Im;
 			std::vector<arma::cx_mat> transition_proj;
 			std::vector<double> transition_rates;
 		};

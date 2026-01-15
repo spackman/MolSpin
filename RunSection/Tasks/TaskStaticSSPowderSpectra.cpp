@@ -569,6 +569,10 @@ namespace RunSection
 											<< ".Iy ";
 									_stream << (*i)->Name() << "." << (*l)->Name() << "." << (*j)->Name() << ".yield"
 											<< ".Iz ";
+									_stream << (*i)->Name() << "." << (*l)->Name() << "." << (*j)->Name() << ".yield"
+											<< ".Ip ";
+									_stream << (*i)->Name() << "." << (*l)->Name() << "." << (*j)->Name() << ".yield"
+											<< ".Im ";
 								}
 							}
 							else
@@ -578,6 +582,8 @@ namespace RunSection
 								_stream << (*i)->Name() << "." << (*l)->Name() << ".Ix ";
 								_stream << (*i)->Name() << "." << (*l)->Name() << ".Iy ";
 								_stream << (*i)->Name() << "." << (*l)->Name() << ".Iz ";
+								_stream << (*i)->Name() << "." << (*l)->Name() << ".Ip ";
+								_stream << (*i)->Name() << "." << (*l)->Name() << ".Im ";
 							}
 						}
 					}
@@ -716,6 +722,8 @@ namespace RunSection
 		arma::cx_mat Iprojx;
 		arma::cx_mat Iprojy;
 		arma::cx_mat Iprojz;
+		arma::cx_mat Iprojp;
+		arma::cx_mat Iprojm;
 
 		std::vector<std::string> spinList;
 
@@ -752,6 +760,16 @@ namespace RunSection
 							return false;
 						}
 
+						if (!_space.CreateOperator(arma::conv_to<arma::cx_mat>::from((*l)->Sp()), (*l), Iprojp))
+						{
+							return false;
+						}
+
+						if (!_space.CreateOperator(arma::conv_to<arma::cx_mat>::from((*l)->Sm()), (*l), Iprojm))
+						{
+							return false;
+						}
+
 						arma::cx_mat P;
 
 						// There are two result modes - either write results per transition  if CIDSP is true or for each defined state if CIDSP is false
@@ -776,6 +794,8 @@ namespace RunSection
 								_datastream << std::real(arma::trace(Iprojx * (*j)->Rate() * P * rho0)) << " ";
 								_datastream << std::real(arma::trace(Iprojy * (*j)->Rate() * P * rho0)) << " ";
 								_datastream << std::real(arma::trace(Iprojz * (*j)->Rate() * P * rho0)) << " ";
+								_datastream << std::real(arma::trace(Iprojp * (*j)->Rate() * P * rho0)) << " ";
+								_datastream << std::real(arma::trace(Iprojm * (*j)->Rate() * P * rho0)) << " ";
 							}
 						}
 						else if (_cidsp == false)
@@ -784,6 +804,8 @@ namespace RunSection
 							_datastream << std::real(arma::trace(Iprojx * rho0)) << " ";
 							_datastream << std::real(arma::trace(Iprojy * rho0)) << " ";
 							_datastream << std::real(arma::trace(Iprojz * rho0)) << " ";
+							_datastream << std::real(arma::trace(Iprojp * rho0)) << " ";
+							_datastream << std::real(arma::trace(Iprojm * rho0)) << " ";
 						}
 					}
 				}
@@ -818,6 +840,8 @@ namespace RunSection
 		arma::cx_mat Iprojx;
 		arma::cx_mat Iprojy;
 		arma::cx_mat Iprojz;
+		arma::cx_mat Iprojp;
+		arma::cx_mat Iprojm;
 
 		std::vector<std::string> spinList;
 
@@ -854,9 +878,21 @@ namespace RunSection
 							return false;
 						}
 
+						if (!_space.CreateOperator(arma::conv_to<arma::cx_mat>::from((*l)->Sp()), (*l), Iprojp))
+						{
+							return false;
+						}
+
+						if (!_space.CreateOperator(arma::conv_to<arma::cx_mat>::from((*l)->Sm()), (*l), Iprojm))
+						{
+							return false;
+						}
+
 						Iprojx = (_eigen_vec.t() * Iprojx * _eigen_vec);
 						Iprojy = (_eigen_vec.t() * Iprojy * _eigen_vec);
 						Iprojz = (_eigen_vec.t() * Iprojz * _eigen_vec);
+						Iprojp = (_eigen_vec.t() * Iprojp * _eigen_vec);
+						Iprojm = (_eigen_vec.t() * Iprojm * _eigen_vec);
 
 						arma::cx_mat P;
 
@@ -882,6 +918,8 @@ namespace RunSection
 								_datastream << std::real(arma::trace(Iprojx * (*j)->Rate() * P * rho0)) << " ";
 								_datastream << std::real(arma::trace(Iprojy * (*j)->Rate() * P * rho0)) << " ";
 								_datastream << std::real(arma::trace(Iprojz * (*j)->Rate() * P * rho0)) << " ";
+								_datastream << std::real(arma::trace(Iprojp * (*j)->Rate() * P * rho0)) << " ";
+								_datastream << std::real(arma::trace(Iprojm * (*j)->Rate() * P * rho0)) << " ";
 							}
 						}
 						else if (_cidsp == false)
@@ -890,6 +928,8 @@ namespace RunSection
 							_datastream << std::real(arma::trace(_eigen_vec * Iprojx * rho0 * _eigen_vec.t())) << " ";
 							_datastream << std::real(arma::trace(_eigen_vec * Iprojy * rho0 * _eigen_vec.t())) << " ";
 							_datastream << std::real(arma::trace(_eigen_vec * Iprojz * rho0 * _eigen_vec.t())) << " ";
+							_datastream << std::real(arma::trace(_eigen_vec * Iprojp * rho0 * _eigen_vec.t())) << " ";
+							_datastream << std::real(arma::trace(_eigen_vec * Iprojm * rho0 * _eigen_vec.t())) << " ";
 						}
 					}
 				}
@@ -922,6 +962,8 @@ namespace RunSection
 		arma::cx_mat Iprojx;
 		arma::cx_mat Iprojy;
 		arma::cx_mat Iprojz;
+		arma::cx_mat Iprojp;
+		arma::cx_mat Iprojm;
 
 		std::vector<std::string> spinList;
 
@@ -957,6 +999,16 @@ namespace RunSection
 							return false;
 						}
 
+						if (!_space.CreateOperator(arma::conv_to<arma::cx_mat>::from((*l)->Sp()), (*l), Iprojp))
+						{
+							return false;
+						}
+
+						if (!_space.CreateOperator(arma::conv_to<arma::cx_mat>::from((*l)->Sm()), (*l), Iprojm))
+						{
+							return false;
+						}
+
 						arma::cx_mat P;
 
 						// There are two result modes - either write results per transition  if CIDSP is true or for each defined state if CIDSP is false
@@ -981,6 +1033,8 @@ namespace RunSection
 								_datastream << std::real(arma::trace(Iprojx * (*j)->Rate() * P * rho0)) << " ";
 								_datastream << std::real(arma::trace(Iprojy * (*j)->Rate() * P * rho0)) << " ";
 								_datastream << std::real(arma::trace(Iprojz * (*j)->Rate() * P * rho0)) << " ";
+								_datastream << std::real(arma::trace(Iprojp * (*j)->Rate() * P * rho0)) << " ";
+								_datastream << std::real(arma::trace(Iprojm * (*j)->Rate() * P * rho0)) << " ";
 							}
 						}
 						else if (_cidsp == false)
@@ -989,6 +1043,8 @@ namespace RunSection
 							_datastream << std::real(arma::trace(Iprojx * rho0)) << " ";
 							_datastream << std::real(arma::trace(Iprojy * rho0)) << " ";
 							_datastream << std::real(arma::trace(Iprojz * rho0)) << " ";
+							_datastream << std::real(arma::trace(Iprojp * rho0)) << " ";
+							_datastream << std::real(arma::trace(Iprojm * rho0)) << " ";
 						}
 					}
 				}
@@ -1020,6 +1076,8 @@ namespace RunSection
 		arma::cx_mat Iprojx;
 		arma::cx_mat Iprojy;
 		arma::cx_mat Iprojz;
+		arma::cx_mat Iprojp;
+		arma::cx_mat Iprojm;
 
 		std::vector<std::string> spinList;
 
@@ -1055,9 +1113,21 @@ namespace RunSection
 							return false;
 						}
 
+						if (!_space.CreateOperator(arma::conv_to<arma::cx_mat>::from((*l)->Sp()), (*l), Iprojp))
+						{
+							return false;
+						}
+
+						if (!_space.CreateOperator(arma::conv_to<arma::cx_mat>::from((*l)->Sm()), (*l), Iprojm))
+						{
+							return false;
+						}
+
 						Iprojx = (_eigen_vec * Iprojx * _eigen_vec.t());
 						Iprojy = (_eigen_vec * Iprojy * _eigen_vec.t());
 						Iprojz = (_eigen_vec * Iprojz * _eigen_vec.t());
+						Iprojp = (_eigen_vec * Iprojp * _eigen_vec.t());
+						Iprojm = (_eigen_vec * Iprojm * _eigen_vec.t());
 
 						arma::cx_mat P;
 
@@ -1083,6 +1153,8 @@ namespace RunSection
 								_datastream << std::real(arma::trace(Iprojx * (*j)->Rate() * P * rho0)) << " ";
 								_datastream << std::real(arma::trace(Iprojy * (*j)->Rate() * P * rho0)) << " ";
 								_datastream << std::real(arma::trace(Iprojz * (*j)->Rate() * P * rho0)) << " ";
+								_datastream << std::real(arma::trace(Iprojp * (*j)->Rate() * P * rho0)) << " ";
+								_datastream << std::real(arma::trace(Iprojm * (*j)->Rate() * P * rho0)) << " ";
 							}
 						}
 						else if (_cidsp == false)
@@ -1091,6 +1163,8 @@ namespace RunSection
 							_datastream << std::setprecision(12) << std::real(arma::trace(Iprojx * rho0)) << " ";
 							_datastream << std::setprecision(12) << std::real(arma::trace(Iprojy * rho0)) << " ";
 							_datastream << std::setprecision(12) << std::real(arma::trace(Iprojz * rho0)) << " ";
+							_datastream << std::setprecision(12) << std::real(arma::trace(Iprojp * rho0)) << " ";
+							_datastream << std::setprecision(12) << std::real(arma::trace(Iprojm * rho0)) << " ";
 						}
 					}
 				}

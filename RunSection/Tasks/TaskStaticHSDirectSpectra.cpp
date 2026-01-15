@@ -205,10 +205,12 @@ namespace RunSection
 				this->Log() << "Failed to obtain input for CIDSP. Using default false." << std::endl;
 			}
 
-			// Get projectors of interest of the spectrum
-			arma::sp_cx_mat Iprojx;
-			arma::sp_cx_mat Iprojy;
-			arma::sp_cx_mat Iprojz;
+		// Get projectors of interest of the spectrum
+		arma::sp_cx_mat Iprojx;
+		arma::sp_cx_mat Iprojy;
+		arma::sp_cx_mat Iprojz;
+		arma::sp_cx_mat Iprojp;
+		arma::sp_cx_mat Iprojm;
 
 			std::vector<std::string> spinList;
 			int m;
@@ -241,7 +243,17 @@ namespace RunSection
 							{
 								return false;
 							}
-								if (!space.CreateOperator(arma::conv_to<arma::sp_cx_mat>::from((*l)->Sz()), (*l), Iprojz))
+							if (!space.CreateOperator(arma::conv_to<arma::sp_cx_mat>::from((*l)->Sz()), (*l), Iprojz))
+							{
+								return false;
+							}
+
+							if (!space.CreateOperator(arma::conv_to<arma::sp_cx_mat>::from((*l)->Sp()), (*l), Iprojp))
+							{
+								return false;
+							}
+
+							if (!space.CreateOperator(arma::conv_to<arma::sp_cx_mat>::from((*l)->Sm()), (*l), Iprojm))
 							{
 								return false;
 							}
@@ -269,6 +281,10 @@ namespace RunSection
 									projection_counter += 1;
 									Operators[projection_counter] = (*j)->Rate() * Iprojz * P;
 									projection_counter += 1;
+									Operators[projection_counter] = (*j)->Rate() * Iprojp * P;
+									projection_counter += 1;
+									Operators[projection_counter] = (*j)->Rate() * Iprojm * P;
+									projection_counter += 1;
 
 									rates(num_transitions) = (*j)->Rate();
 									num_transitions++;
@@ -282,6 +298,10 @@ namespace RunSection
 								Operators[projection_counter] = Iprojy;
 								projection_counter += 1;
 								Operators[projection_counter] = Iprojz;
+								projection_counter += 1;
+								Operators[projection_counter] = Iprojp;
+								projection_counter += 1;
+								Operators[projection_counter] = Iprojm;
 								projection_counter += 1;
 							
 								for (auto j = transitions.cbegin(); j != transitions.cend(); j++)
@@ -1711,22 +1731,28 @@ namespace RunSection
 								auto transitions = (*i)->Transitions();
 								for (auto j = transitions.cbegin(); j != transitions.cend(); j++)
 								{
-									_stream << (*i)->Name() << "." << (*l)->Name() << "." << (*j)->Name() << ".yield"
-											<< ".Ix ";
-									_stream << (*i)->Name() << "." << (*l)->Name() << "." << (*j)->Name() << ".yield"
-											<< ".Iy ";
-									_stream << (*i)->Name() << "." << (*l)->Name() << "." << (*j)->Name() << ".yield"
-											<< ".Iz ";
+										_stream << (*i)->Name() << "." << (*l)->Name() << "." << (*j)->Name() << ".yield"
+												<< ".Ix ";
+										_stream << (*i)->Name() << "." << (*l)->Name() << "." << (*j)->Name() << ".yield"
+												<< ".Iy ";
+										_stream << (*i)->Name() << "." << (*l)->Name() << "." << (*j)->Name() << ".yield"
+												<< ".Iz ";
+										_stream << (*i)->Name() << "." << (*l)->Name() << "." << (*j)->Name() << ".yield"
+												<< ".Ip ";
+										_stream << (*i)->Name() << "." << (*l)->Name() << "." << (*j)->Name() << ".yield"
+												<< ".Im ";
+									}
 								}
-							}
-							else
-							{
-								// Write each state name
-								auto states = (*i)->States();
-								_stream << (*i)->Name() << "." << (*l)->Name() << ".Ix ";
-								_stream << (*i)->Name() << "." << (*l)->Name() << ".Iy ";
-								_stream << (*i)->Name() << "." << (*l)->Name() << ".Iz ";
-							}
+								else
+								{
+									// Write each state name
+									auto states = (*i)->States();
+									_stream << (*i)->Name() << "." << (*l)->Name() << ".Ix ";
+									_stream << (*i)->Name() << "." << (*l)->Name() << ".Iy ";
+									_stream << (*i)->Name() << "." << (*l)->Name() << ".Iz ";
+									_stream << (*i)->Name() << "." << (*l)->Name() << ".Ip ";
+									_stream << (*i)->Name() << "." << (*l)->Name() << ".Im ";
+								}
 						}
 					}
 				}

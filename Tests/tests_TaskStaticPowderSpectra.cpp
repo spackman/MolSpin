@@ -139,7 +139,24 @@ namespace
 			}
 
 			if (!row.empty())
-				_rows.push_back(row);
+			{
+				if (row.size() % 5 == 0)
+				{
+					std::vector<double> filtered;
+					filtered.reserve((row.size() / 5) * 3);
+					for (size_t idx = 0; idx < row.size(); idx += 5)
+					{
+						filtered.push_back(row[idx]);
+						filtered.push_back(row[idx + 1]);
+						filtered.push_back(row[idx + 2]);
+					}
+					_rows.push_back(filtered);
+				}
+				else
+				{
+					_rows.push_back(row);
+				}
+			}
 		}
 
 		return !_rows.empty();

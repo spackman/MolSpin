@@ -54,6 +54,7 @@
 #include "TaskStaticHSDirectTimeEvoSymmUncoupled.h"
 #include "TaskStaticHSStochTimeEvoSymmUncoupled.h"
 #include "TaskStaticHSDirectSpectra.h"
+#include "TaskStaticHSTrEPRSpectra.h"
 // #include "TaskDynamicHSDirectSpectra.h"
 
 #include "TaskActionSpectrumHistogram.h"
@@ -245,6 +246,10 @@ namespace RunSection
 		else if (_tasktype.compare("statichs-direct-spectra") == 0 || _tasktype.compare("StaticHS-Direct-Yields") == 0)
 		{
 			task = std::make_shared<TaskStaticHSDirectSpectra>(_obj, *this);
+		}
+		else if (_tasktype.compare("statichs-trepr-spectra") == 0 || _tasktype.compare("StaticHS-TrEPR-Spectra") == 0)
+		{
+			task = std::make_shared<TaskStaticHSTrEPRSpectra>(_obj, *this);
 		}
 
 		// NEW (ADDED by Luca Gerhards): Including Action Histrograms in the context of Hamish Hiscock

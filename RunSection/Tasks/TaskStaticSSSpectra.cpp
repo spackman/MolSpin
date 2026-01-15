@@ -712,24 +712,30 @@ namespace RunSection
 								auto transitions = (*i)->Transitions();
 								for (auto j = transitions.cbegin(); j != transitions.cend(); j++)
 								{
-									_stream << (*i)->Name() << "." << (*l)->Name() << "." << (*j)->Name() << ".yield"
-											<< ".Ix ";
-									_stream << (*i)->Name() << "." << (*l)->Name() << "." << (*j)->Name() << ".yield"
-											<< ".Iy ";
-									_stream << (*i)->Name() << "." << (*l)->Name() << "." << (*j)->Name() << ".yield"
-											<< ".Iz ";
-								}
-							}
-							else
-							{
-								// Write each state name
-								auto states = (*i)->States();
-								_stream << (*i)->Name() << "." << (*l)->Name() << ".Ix ";
-								_stream << (*i)->Name() << "." << (*l)->Name() << ".Iy ";
-								_stream << (*i)->Name() << "." << (*l)->Name() << ".Iz ";
+								_stream << (*i)->Name() << "." << (*l)->Name() << "." << (*j)->Name() << ".yield"
+										<< ".Ix ";
+								_stream << (*i)->Name() << "." << (*l)->Name() << "." << (*j)->Name() << ".yield"
+										<< ".Iy ";
+								_stream << (*i)->Name() << "." << (*l)->Name() << "." << (*j)->Name() << ".yield"
+										<< ".Iz ";
+								_stream << (*i)->Name() << "." << (*l)->Name() << "." << (*j)->Name() << ".yield"
+										<< ".Ip ";
+								_stream << (*i)->Name() << "." << (*l)->Name() << "." << (*j)->Name() << ".yield"
+										<< ".Im ";
 							}
 						}
+						else
+						{
+							// Write each state name
+							auto states = (*i)->States();
+							_stream << (*i)->Name() << "." << (*l)->Name() << ".Ix ";
+							_stream << (*i)->Name() << "." << (*l)->Name() << ".Iy ";
+							_stream << (*i)->Name() << "." << (*l)->Name() << ".Iz ";
+							_stream << (*i)->Name() << "." << (*l)->Name() << ".Ip ";
+							_stream << (*i)->Name() << "." << (*l)->Name() << ".Im ";
+						}
 					}
+				}
 				}
 			}
 		}
@@ -843,6 +849,8 @@ namespace RunSection
 		_cache.spin_Ix.reserve(spinList.size());
 		_cache.spin_Iy.reserve(spinList.size());
 		_cache.spin_Iz.reserve(spinList.size());
+		_cache.spin_Ip.reserve(spinList.size());
+		_cache.spin_Im.reserve(spinList.size());
 
 		for (auto l = _system->spins_cbegin(); l != _system->spins_cend(); l++)
 		{
@@ -853,6 +861,8 @@ namespace RunSection
 					arma::cx_mat Iprojx;
 					arma::cx_mat Iprojy;
 					arma::cx_mat Iprojz;
+					arma::cx_mat Iprojp;
+					arma::cx_mat Iprojm;
 
 					if (!_space.CreateOperator(arma::conv_to<arma::cx_mat>::from((*l)->Sx()), (*l), Iprojx))
 					{
@@ -869,9 +879,21 @@ namespace RunSection
 						return false;
 					}
 
+					if (!_space.CreateOperator(arma::conv_to<arma::cx_mat>::from((*l)->Sp()), (*l), Iprojp))
+					{
+						return false;
+					}
+
+					if (!_space.CreateOperator(arma::conv_to<arma::cx_mat>::from((*l)->Sm()), (*l), Iprojm))
+					{
+						return false;
+					}
+
 					_cache.spin_Ix.push_back(std::move(Iprojx));
 					_cache.spin_Iy.push_back(std::move(Iprojy));
 					_cache.spin_Iz.push_back(std::move(Iprojz));
+					_cache.spin_Ip.push_back(std::move(Iprojp));
+					_cache.spin_Im.push_back(std::move(Iprojm));
 				}
 			}
 		}
@@ -950,6 +972,8 @@ namespace RunSection
 					_datastream << std::real(arma::trace(_cache.spin_Ix[s] * rate * P * rho0)) << " ";
 					_datastream << std::real(arma::trace(_cache.spin_Iy[s] * rate * P * rho0)) << " ";
 					_datastream << std::real(arma::trace(_cache.spin_Iz[s] * rate * P * rho0)) << " ";
+					_datastream << std::real(arma::trace(_cache.spin_Ip[s] * rate * P * rho0)) << " ";
+					_datastream << std::real(arma::trace(_cache.spin_Im[s] * rate * P * rho0)) << " ";
 				}
 			}
 		}
@@ -960,6 +984,8 @@ namespace RunSection
 				_datastream << std::real(arma::trace(_cache.spin_Ix[s] * rho0)) << " ";
 				_datastream << std::real(arma::trace(_cache.spin_Iy[s] * rho0)) << " ";
 				_datastream << std::real(arma::trace(_cache.spin_Iz[s] * rho0)) << " ";
+				_datastream << std::real(arma::trace(_cache.spin_Ip[s] * rho0)) << " ";
+				_datastream << std::real(arma::trace(_cache.spin_Im[s] * rho0)) << " ";
 			}
 		}
 
@@ -1012,6 +1038,8 @@ namespace RunSection
 					_datastream << std::real(arma::trace(_cache.spin_Ix[s] * rate * P * rho0)) << " ";
 					_datastream << std::real(arma::trace(_cache.spin_Iy[s] * rate * P * rho0)) << " ";
 					_datastream << std::real(arma::trace(_cache.spin_Iz[s] * rate * P * rho0)) << " ";
+					_datastream << std::real(arma::trace(_cache.spin_Ip[s] * rate * P * rho0)) << " ";
+					_datastream << std::real(arma::trace(_cache.spin_Im[s] * rate * P * rho0)) << " ";
 				}
 			}
 		}
@@ -1022,6 +1050,8 @@ namespace RunSection
 				_datastream << std::real(arma::trace(_cache.spin_Ix[s] * rho0)) << " ";
 				_datastream << std::real(arma::trace(_cache.spin_Iy[s] * rho0)) << " ";
 				_datastream << std::real(arma::trace(_cache.spin_Iz[s] * rho0)) << " ";
+				_datastream << std::real(arma::trace(_cache.spin_Ip[s] * rho0)) << " ";
+				_datastream << std::real(arma::trace(_cache.spin_Im[s] * rho0)) << " ";
 			}
 		}
 

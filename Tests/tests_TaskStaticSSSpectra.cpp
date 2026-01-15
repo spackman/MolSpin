@@ -10,6 +10,38 @@
 #include <iostream>
 #include "TaskStaticSSSpectra.h"
 
+namespace
+{
+	std::vector<std::string> FilterSpinProjectionOutput(const std::vector<std::string> &_tokens, size_t _expected_size)
+	{
+		if (_tokens.size() <= _expected_size || _expected_size < 2)
+			return _tokens;
+
+		size_t expected_values = _expected_size - 2;
+		size_t groups = expected_values / 3;
+		if (groups == 0)
+			return _tokens;
+
+		std::vector<std::string> filtered;
+		filtered.reserve(_expected_size);
+		filtered.push_back(_tokens[0]);
+		filtered.push_back(_tokens[1]);
+
+		size_t idx = 2;
+		for (size_t g = 0; g < groups; ++g)
+		{
+			if (idx + 2 >= _tokens.size())
+				break;
+			filtered.push_back(_tokens[idx]);
+			filtered.push_back(_tokens[idx + 1]);
+			filtered.push_back(_tokens[idx + 2]);
+			idx += 5; // Ix, Iy, Iz, Ip, Im
+		}
+
+		return filtered;
+	}
+}
+
 //////////////////////////////////////////////////////////////////////////////
 // Tests a single calculation Method=timeinf CIDSP=true without any Actions
 bool test_task_staticssspectra_method_timeinf_cidsp_true()
@@ -104,6 +136,7 @@ bool test_task_staticssspectra_method_timeinf_cidsp_true()
 	std::istringstream stream1(result_string);
 	for (std::string s; std::getline(stream1, s, ' ');)
 		result_vec_string.push_back(s);
+	result_vec_string = FilterSpinProjectionOutput(result_vec_string, result.size());
 
 	for (auto i = 0; i < (int)result.size(); i++)
 	{
@@ -214,6 +247,7 @@ bool test_task_staticssspectra_method_timeinf_cidsp_false()
 	std::istringstream stream1(result_string);
 	for (std::string s; std::getline(stream1, s, ' ');)
 		result_vec_string.push_back(s);
+	result_vec_string = FilterSpinProjectionOutput(result_vec_string, result.size());
 
 	for (auto i = 0; i < (int)result.size(); i++)
 	{
@@ -329,6 +363,7 @@ bool test_task_staticssspectra_method_timeinf_cidsp_false_instant_pulse()
 	std::istringstream stream1(result_string);
 	for (std::string s; std::getline(stream1, s, ' ');)
 		result_vec_string.push_back(s);
+	result_vec_string = FilterSpinProjectionOutput(result_vec_string, result.size());
 
 	// for (const std::string& str : result_vec_string) {
     //     std::cout << str << " ";
@@ -448,6 +483,7 @@ bool test_task_staticssspectra_method_timeinf_cidsp_false_longpulsestaticfield_p
 	std::istringstream stream1(result_string);
 	for (std::string s; std::getline(stream1, s, ' ');)
 		result_vec_string.push_back(s);
+	result_vec_string = FilterSpinProjectionOutput(result_vec_string, result.size());
 
 	// for (const std::string& str : result_vec_string) {
     //     std::cout << str << " ";
@@ -596,6 +632,7 @@ bool test_task_staticssspectra_method_timeinf_cidsp_false_longpulse_pulse()
 	std::istringstream stream1(result_string);
 	for (std::string s; std::getline(stream1, s, ' ');)
 		result_vec_string.push_back(s);
+	result_vec_string = FilterSpinProjectionOutput(result_vec_string, result.size());
 
 	for (auto i = 0; i < (int)result.size(); i++)
 	{
