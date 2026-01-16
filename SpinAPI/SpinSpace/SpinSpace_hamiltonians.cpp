@@ -661,7 +661,7 @@ namespace SpinAPI
 
 		// Multiply by common prefactor. TODO: Consider which system of units to use
 		if (_interaction->AddCommonPrefactor())
-			tmp *= 8.79410005e+1;
+			tmp *= 8.79410005e+1; 
 
 		// Check whether we want a superspace or Hilbert space result
 		if (this->useSuperspace)

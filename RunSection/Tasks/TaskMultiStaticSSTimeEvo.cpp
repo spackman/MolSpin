@@ -65,10 +65,6 @@ namespace RunSection
 		arma::cx_vec rho0(dimensions);
 		unsigned int nextDimension = 0; // Keeps track of the dimension where the next spin space starts
 
-		std::vector<std::vector<int>> test = {{10,5,10},{5,10}};
-		GenerateCombinationsNI(test,145);
-		std::cin.get();
-
 		// Loop through the systems again to fill this matrix and vector
 		for (auto i = spaces.cbegin(); i != spaces.cend(); i++)
 		{
@@ -180,25 +176,27 @@ namespace RunSection
 		// Write results for initial state as well (i.e. at time 0)
 		this->Data() << this->RunSettings()->CurrentStep() << " 0 ";
 		this->WriteStandardOutput(this->Data());
-		nextDimension = 0;
-		for (auto i = spaces.cbegin(); i != spaces.cend(); i++)
-		{
-			// Get the superspace result vector and convert it back to the native Hilbert space
-			arma::cx_mat rho_result;
-			arma::cx_vec rho_result_vec;
-			rho_result_vec = rho0.rows(nextDimension, nextDimension + i->second->SpaceDimensions() - 1);
-			if (!i->second->OperatorFromSuperspace(rho_result_vec, rho_result))
-			{
-				this->Log() << "ERROR: Failed to convert resulting superspace-vector back to native Hilbert space for spin system \"" << i->first->Name() << "\"!" << std::endl;
-				return false;
-			}
-
-			// Get the results
-			this->GatherResults(rho_result, *(i->first), *(i->second));
-
-			// Move on to next spin space
-			nextDimension += i->second->SpaceDimensions();
-		}
+		// There are two result modes - either write results per transition or for each defined state
+		bool nf = SeperateSpinSystems(rho0, spaces, this->ProductYieldsOnly);
+		//nextDimension = 0;
+		//for (auto i = spaces.cbegin(); i != spaces.cend(); i++)
+		//{
+		//	// Get the superspace result vector and convert it back to the native Hilbert space
+		//	arma::cx_mat rho_result;
+		//	arma::cx_vec rho_result_vec;
+		//	rho_result_vec = rho0.rows(nextDimension, nextDimension + i->second->SpaceDimensions() - 1);
+		//	if (!i->second->OperatorFromSuperspace(rho_result_vec, rho_result))
+		//	{
+		//		this->Log() << "ERROR: Failed to convert resulting superspace-vector back to native Hilbert space for spin system \"" << i->first->Name() << "\"!" << std::endl;
+		//		return false;
+		//	}
+//
+		//	// Get the results
+		//	this->GatherResults(rho_result, *(i->first), *(i->second));
+//
+		//	// Move on to next spin space
+		//	nextDimension += i->second->SpaceDimensions();
+		//}
 		this->Data() << std::endl;
 
 		arma::cx_vec result = arma::cx_vec(rho0.n_rows);
@@ -225,12 +223,13 @@ namespace RunSection
 					arma::cx_vec tmp = P * rho0;
 					rho0 = tmp;
 				}
-				NoFail = SeperateSpinSystems(rho0,spaces);
+				NoFail = SeperateSpinSystems(rho0,spaces,this->ProductYieldsOnly);
 				if (!NoFail)
 					return false;
 				this->Data() << std::endl;
 			}
 			this->Log() << "Done with calculation." << std::endl;
+			return true;
 
 		}
 
@@ -258,7 +257,7 @@ namespace RunSection
 			// Propagate
 			this->timestep = RungeKutta45Armadillo(L, rho0, rho0, this->timestep, ComputeRhoDot, {1e-7,1e-6}, MinTimeStep, MaxTimeStep);
 
-			NoFail = SeperateSpinSystems(rho0, spaces);
+			NoFail = SeperateSpinSystems(rho0, spaces, this->ProductYieldsOnly);
 			if (!NoFail)
 				return false;
 			// Terminate the line in the data file after iteration through all spin systems
@@ -288,10 +287,49 @@ namespace RunSection
 		}
 	}
 
-    bool TaskMultiStaticSSTimeEvo::SeperateSpinSystems(const arma::cx_vec &rho0, const std::vector<std::pair<SpinAPI::system_ptr, std::shared_ptr<SpinAPI::SpinSpace>>> &spaces)
+    bool TaskMultiStaticSSTimeEvo::SeperateSpinSystems(const arma::cx_vec &rho0, const std::vector<std::pair<SpinAPI::system_ptr, std::shared_ptr<SpinAPI::SpinSpace>>> &spaces, bool transitionyields)
     {
 		// Retrieve the resulting density matrix for each spin system and output the results
 		int nextDimension = 0;
+		double SumYield = 0;
+		if (transitionyields)
+		{
+			int NextDimension = 0;
+			for (auto i = spaces.cbegin(); i != spaces.cend(); i++)
+			{
+				arma::cx_mat rho_result;
+				int TempDimension = NextDimension + i->second->SpaceDimensions();
+				arma::cx_vec rho_result_vec = rho0.rows(NextDimension,TempDimension);
+				NextDimension = TempDimension;
+				if (!i->second->OperatorFromSuperspace(rho_result_vec, rho_result))
+				{
+					this->Log() << "ERROR: Failed to convert resulting superspace-vector back to native Hilbert space for spin system \"" << i->first->Name() << "\"!" << std::endl;
+					return false;
+				}
+
+				// Loop through all defind transitions
+				auto transitions = (*i).first->Transitions();
+				arma::cx_mat P;
+				for (auto j = transitions.cbegin(); j != transitions.cend(); j++)
+				{
+					// Make sure that there is a state object
+					if ((*j)->SourceState() == nullptr)
+						continue;	
+					if (!i->second->GetState((*j)->SourceState(), P))
+					{
+						this->Log() << "Failed to obtain projection matrix onto state \"" << (*j)->Name() << "\" of SpinSystem \"" << (*i).first->Name() << "\"." << std::endl;
+						continue;
+					}
+					double Yield = (*j)->Rate() * std::abs(arma::trace(P * rho_result));
+					SumYield += Yield;
+					// Return the yield for this transition
+					this->Data() << Yield << " ";
+				}
+			}
+			this->Data() << SumYield << " ";
+			SumYield = 0;
+			return true;
+		}
 		for (auto i = spaces.cbegin(); i != spaces.cend(); i++)
 		{
 			// Get the superspace result vector and convert it back to the native Hilbert space
@@ -331,10 +369,21 @@ namespace RunSection
 		auto systems = this->SpinSystems();
 		for (auto i = systems.cbegin(); i != systems.cend(); i++)
 		{
-			// Write each state name
-			auto states = (*i)->States();
-			for (auto j = states.cbegin(); j != states.cend(); j++)
-				_stream << (*i)->Name() << "." << (*j)->Name() << " ";
+			// Should yields be written per transition or per defined state?
+			if (this->ProductYieldsOnly)
+			{
+				// Write each transition name
+				auto transitions = (*i)->Transitions();
+				for (auto j = transitions.cbegin(); j != transitions.cend(); j++)
+					_stream << (*i)->Name() << "." << (*j)->Name() << ".yield ";
+			}
+			else
+			{
+				// Write each state name
+				auto states = (*i)->States();
+				for (auto j = states.cbegin(); j != states.cend(); j++)
+					_stream << (*i)->Name() << "." << (*j)->Name() << " ";
+			}
 		}
 		_stream << std::endl;
 	}
@@ -344,6 +393,8 @@ namespace RunSection
 	{
 		double inputTimestep = 0.0;
 		double inputTotaltime = 0.0;
+
+		this->Properties()->Get("transitionyields", this->ProductYieldsOnly);
 
 		// Get timestep
 		if (this->Properties()->Get("timestep", inputTimestep))

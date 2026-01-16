@@ -73,7 +73,11 @@ namespace SpinAPI
 		}
 
 		// The rate/lifetime can only be defined as a positive quantity
-		this->rate = std::abs(this->rate);
+		#if NEGATIVERATES == 1
+			this->rate = this->rate;
+		#else
+			this->rate = std::abs(this->rate);
+		#endif
 
 		// Parse transition type
 		if (this->properties->Get("type", str))
