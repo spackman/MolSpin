@@ -20,8 +20,43 @@
 #include "Operator.h"
 #include "Pulse.h"
 
+#include <sstream>
+#include <cmath>
+
 namespace RunSection
 {
+
+	namespace
+	{
+		// Parse a 3-vector from a string like "1 0 0" or "1,0,0".
+		bool ParseVec3(const std::string &s, arma::vec &v)
+		{
+			v.set_size(3);
+			std::string tmp = s;
+			for (char &c : tmp)
+			{
+				if (c == ',')
+					c = ' ';
+			}
+
+			std::istringstream iss(tmp);
+			double x, y, z;
+			if (!(iss >> x >> y >> z))
+				return false;
+			v(0) = x;
+			v(1) = y;
+			v(2) = z;
+			return true;
+		}
+
+		arma::vec SafeNormalise(const arma::vec &v, const arma::vec &fallback)
+		{
+			double n = arma::norm(v);
+			if (!std::isfinite(n) || n < 1e-15)
+				return fallback;
+			return v / n;
+		}
+	}
 	// -----------------------------------------------------
 	// TaskStaticSSSpectra Constructors and Destructor
 	// -----------------------------------------------------
@@ -682,6 +717,27 @@ namespace RunSection
 		_stream << "Time ";
 		this->WriteStandardOutputHeader(_stream);
 
+		// Match the column labels to the operator frame used in BuildProjectionCache.
+		std::string outputframe = "lab";
+		(void)this->Properties()->Get("outputframe", outputframe);
+		std::string Lx = ".Ix ";
+		std::string Ly = ".Iy ";
+		std::string Lz = ".Iz ";
+		std::string Lp = ".Ip ";
+		std::string Lm = ".Im ";
+		if (outputframe == "cw")
+		{
+			// In CW-RWA mode we interpret the printed operators as:
+			//   x -> drive axis (e1)
+			//   y -> absorptive quadrature axis (e2)
+			//   z -> quantization axis (n)
+			Lx = ".Idrive ";
+			Ly = ".Iabs ";
+			Lz = ".In ";
+			Lp = ".Iplus ";
+			Lm = ".Iminus ";
+		}
+
 		std::vector<std::string> spinList;
 		bool CIDSP = false;
 		int m;
@@ -722,6 +778,11 @@ namespace RunSection
 										<< ".Ip ";
 								_stream << (*i)->Name() << "." << (*l)->Name() << "." << (*j)->Name() << ".yield"
 										<< ".Im ";
+								_stream << (*i)->Name() << "." << (*l)->Name() << "." << (*j)->Name() << ".yield" << Lx;
+								_stream << (*i)->Name() << "." << (*l)->Name() << "." << (*j)->Name() << ".yield" << Ly;
+								_stream << (*i)->Name() << "." << (*l)->Name() << "." << (*j)->Name() << ".yield" << Lz;
+								_stream << (*i)->Name() << "." << (*l)->Name() << "." << (*j)->Name() << ".yield" << Lp;
+								_stream << (*i)->Name() << "." << (*l)->Name() << "." << (*j)->Name() << ".yield" << Lm;
 							}
 						}
 						else
@@ -733,6 +794,11 @@ namespace RunSection
 							_stream << (*i)->Name() << "." << (*l)->Name() << ".Iz ";
 							_stream << (*i)->Name() << "." << (*l)->Name() << ".Ip ";
 							_stream << (*i)->Name() << "." << (*l)->Name() << ".Im ";
+							_stream << (*i)->Name() << "." << (*l)->Name() << Lx;
+							_stream << (*i)->Name() << "." << (*l)->Name() << Ly;
+							_stream << (*i)->Name() << "." << (*l)->Name() << Lz;
+							_stream << (*i)->Name() << "." << (*l)->Name() << Lp;
+							_stream << (*i)->Name() << "." << (*l)->Name() << Lm;
 						}
 					}
 				}
@@ -839,6 +905,36 @@ namespace RunSection
 	{
 		_cache = ProjectionCache{};
 
+		// Optional: output observables in an orientation-dependent CW-RWA frame.
+		// This is a PURE operator-frame change (linear combinations of Sx,Sy,Sz) and therefore
+		// stays consistent with any Hamiltonian tensor rotation that was performed externally.
+		//
+		// outputframe = lab | cw
+		//   lab: prints <Sx>,<Sy>,<Sz>,<S+>,<S-> (current behaviour)
+		//   cw : prints <S_e1>,<S_e2>,<S_n>,<S+_(e1,e2)>,<S-_(e1,e2)>
+		//        where n is the Zeeman quantization axis derived from the (already rotated) g-tensor,
+		//        e1 is the transverse drive axis, and e2 = n x e1 is the absorptive quadrature axis.
+		//
+		// b0dir / b1dir are lab-frame directions (defaults: z and x)
+		std::string outputframe = "lab";
+		(void)this->Properties()->Get("outputframe", outputframe);
+		std::string b0dir_str, b1dir_str;
+		arma::vec b0dir = arma::vec({0.0, 0.0, 1.0});
+		arma::vec b1dir = arma::vec({1.0, 0.0, 0.0});
+		if (this->Properties()->Get("b0dir", b0dir_str))
+		{
+			arma::vec tmp;
+			if (ParseVec3(b0dir_str, tmp))
+				b0dir = SafeNormalise(tmp, b0dir);
+		}
+		if (this->Properties()->Get("b1dir", b1dir_str))
+		{
+			arma::vec tmp;
+			if (ParseVec3(b1dir_str, tmp))
+				b1dir = SafeNormalise(tmp, b1dir);
+		}
+
+
 		std::vector<std::string> spinList;
 		_cache.has_spinlist = this->Properties()->GetList("spinlist", spinList, ',');
 		if (!_cache.has_spinlist)
@@ -888,6 +984,46 @@ namespace RunSection
 					{
 						return false;
 					}
+
+				    // If requested, rotate the OUTPUT OPERATORS into the CW-RWA frame.
+					// Note: We do NOT rotate the density matrix here; Tr(O_rot rho) = Tr(O rho_rot)
+					// so rotating the observable operators is sufficient and avoids costly basis transforms.
+					//
+					// Applied to ELECTRONS only: the microwave rotating-frame construction is defined for electron spins.
+					if (outputframe == "cw" && (*l)->Type() == SpinAPI::SpinType::Electron)
+					{
+						// Quantization axis from (already rotated) g-tensor.
+						// n ~ G^T * b0dir
+						arma::mat G = (*l)->GetTensor().LabFrame();
+						arma::vec a = G.t() * b0dir;
+						arma::vec n = SafeNormalise(a, b0dir);
+
+						// Drive axis from transverse component of v ~ G^T * b1dir
+						arma::vec v = G.t() * b1dir;
+						arma::vec v_perp = v - arma::dot(v, n) * n;
+						arma::vec e1 = SafeNormalise(v_perp, b1dir);
+
+						// Absorptive quadrature axis
+						arma::vec e2 = arma::cross(n, e1);
+						e2 = SafeNormalise(e2, arma::vec({0.0, 1.0, 0.0}));
+
+						// Build rotated spin operators: S_e1, S_e2, S_n.
+						arma::cx_mat I_e1 = e1(0) * Iprojx + e1(1) * Iprojy + e1(2) * Iprojz;
+						arma::cx_mat I_e2 = e2(0) * Iprojx + e2(1) * Iprojy + e2(2) * Iprojz;
+						arma::cx_mat I_n  = n(0)  * Iprojx + n(1)  * Iprojy + n(2)  * Iprojz;
+
+						// Raising/lowering operators in the (e1,e2) transverse plane
+						arma::cx_double I(0.0, 1.0);
+						arma::cx_mat I_plus  = I_e1 + I * I_e2;
+						arma::cx_mat I_minus = I_e1 - I * I_e2;
+
+						Iprojx = std::move(I_e1);
+						Iprojy = std::move(I_e2);
+						Iprojz = std::move(I_n);
+						Iprojp = std::move(I_plus);
+						Iprojm = std::move(I_minus);
+					}
+
 
 					_cache.spin_Ix.push_back(std::move(Iprojx));
 					_cache.spin_Iy.push_back(std::move(Iprojy));

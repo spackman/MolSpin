@@ -72,15 +72,16 @@ namespace RunSection
 			this->WriteHeader(this->Data());
 		}
 
+		// Microwave angular frequency (rad/ns)
 		const double omega_mw = 2.0 * arma::datum::pi * this->mwFrequencyGHz;
 
 		// Loop through all SpinSystems
 		auto systems = this->SpinSystems();
-		for (auto i = systems.cbegin(); i != systems.cend(); i++)
+		for (auto sysIt = systems.cbegin(); sysIt != systems.cend(); sysIt++)
 		{
-			this->Log() << "\nStarting with SpinSystem \"" << (*i)->Name() << "\"." << std::endl;
+			this->Log() << "\nStarting with SpinSystem \"" << (*sysIt)->Name() << "\"." << std::endl;
 
-			SpinAPI::SpinSpace space(*(*i));
+			SpinAPI::SpinSpace space(*(*sysIt));
 			space.UseSuperoperatorSpace(false);
 			space.UseFullTensorRotation(this->fullTensorRotation);
 			if (this->fullTensorRotation)
@@ -92,7 +93,7 @@ namespace RunSection
 			std::vector<std::string> h0list = this->hamiltonianH0list;
 			if (h0list.empty())
 			{
-				for (const auto &interaction : (*i)->Interactions())
+				for (const auto &interaction : (*sysIt)->Interactions())
 				{
 					if (!SpinAPI::IsStatic(*interaction))
 						continue;
@@ -102,16 +103,16 @@ namespace RunSection
 
 			if (h0list.empty())
 			{
-				this->Log() << "No interactions specified for Hamiltonian H0 in SpinSystem \"" << (*i)->Name() << "\". Skipping." << std::endl;
+				this->Log() << "No interactions specified for Hamiltonian H0 in SpinSystem \"" << (*sysIt)->Name() << "\". Skipping." << std::endl;
 				continue;
 			}
 
 			// Find electron spins
-			auto electron1 = (*i)->spins_find(this->electron1Name);
-			auto electron2 = (*i)->spins_find(this->electron2Name);
+			auto electron1 = (*sysIt)->spins_find(this->electron1Name);
+			auto electron2 = (*sysIt)->spins_find(this->electron2Name);
 			if (electron1 == nullptr || electron2 == nullptr)
 			{
-				this->Log() << "Failed to find electron spins \"" << this->electron1Name << "\" and/or \"" << this->electron2Name << "\" in SpinSystem \"" << (*i)->Name() << "\"." << std::endl;
+				this->Log() << "Failed to find electron spins \"" << this->electron1Name << "\" and/or \"" << this->electron2Name << "\" in SpinSystem \"" << (*sysIt)->Name() << "\"." << std::endl;
 				continue;
 			}
 
@@ -125,32 +126,70 @@ namespace RunSection
 				continue;
 			}
 
+			// Determine Zeeman interaction used for B and for dH/dB (Jacobian)
+			SpinAPI::interaction_ptr fieldInteraction = nullptr;
+			if (!this->fieldInteractionName.empty())
+			{
+				fieldInteraction = (*sysIt)->interactions_find(this->fieldInteractionName);
+			}
+			if (fieldInteraction == nullptr)
+			{
+				for (auto inter = (*sysIt)->interactions_cbegin(); inter != (*sysIt)->interactions_cend(); inter++)
+				{
+					std::string type;
+					if ((*inter)->Properties()->Get("type", type))
+					{
+						type = ToLower(type);
+						if (type == "zeeman")
+						{
+							fieldInteraction = (*inter);
+							break;
+						}
+					}
+				}
+			}
+			if (fieldInteraction == nullptr)
+			{
+				this->Log() << "No Zeeman interaction found in SpinSystem \"" << (*sysIt)->Name() << "\". Need a Zeeman interaction for field->frequency mapping." << std::endl;
+				continue;
+			}
+
+			arma::vec Bvec = fieldInteraction->Field();
+			if (Bvec.n_elem != 3)
+			{
+				this->Log() << "Zeeman interaction \"" << fieldInteraction->Name() << "\" does not provide a 3-vector field." << std::endl;
+				continue;
+			}
+			const double Bmag = arma::norm(Bvec);
+			if (!std::isfinite(Bmag) || Bmag <= 0.0)
+			{
+				this->Log() << "Zeeman field magnitude is invalid (" << Bmag << ")." << std::endl;
+				continue;
+			}
+			const double field_mT = 1.0e3 * Bmag;
+
 			// Build initial density matrix
 			arma::cx_mat rho0;
 			bool hasInitialState = false;
-
 			if (!this->initialStateName.empty())
 			{
-				auto state = (*i)->states_find(this->initialStateName);
+				auto state = (*sysIt)->states_find(this->initialStateName);
 				if (state == nullptr)
 				{
-					this->Log() << "Initial state \"" << this->initialStateName << "\" not found in SpinSystem \"" << (*i)->Name() << "\"." << std::endl;
+					this->Log() << "Initial state \"" << this->initialStateName << "\" not found in SpinSystem \"" << (*sysIt)->Name() << "\"." << std::endl;
 				}
 				else
 				{
 					if (space.GetState(state, rho0))
-					{
 						hasInitialState = true;
-					}
 				}
 			}
-
 			if (!hasInitialState)
 			{
-				auto initial_states = (*i)->InitialState();
+				auto initial_states = (*sysIt)->InitialState();
 				if (initial_states.empty())
 				{
-					this->Log() << "Skipping SpinSystem \"" << (*i)->Name() << "\" as no initial state was specified." << std::endl;
+					this->Log() << "Skipping SpinSystem \"" << (*sysIt)->Name() << "\" as no initial state was specified." << std::endl;
 					continue;
 				}
 
@@ -159,7 +198,7 @@ namespace RunSection
 					arma::cx_mat tmp;
 					if (!space.GetState(*state, tmp))
 					{
-						this->Log() << "Failed to obtain projection matrix onto state \"" << (*state)->Name() << "\" of SpinSystem \"" << (*i)->Name() << "\"." << std::endl;
+						this->Log() << "Failed to obtain projection matrix onto state \"" << (*state)->Name() << "\" of SpinSystem \"" << (*sysIt)->Name() << "\"." << std::endl;
 						continue;
 					}
 
@@ -177,73 +216,31 @@ namespace RunSection
 
 			if (!hasInitialState)
 			{
-				this->Log() << "Failed to construct initial state for SpinSystem \"" << (*i)->Name() << "\"." << std::endl;
+				this->Log() << "Failed to construct initial state for SpinSystem \"" << (*sysIt)->Name() << "\"." << std::endl;
 				continue;
 			}
-
 			rho0 /= arma::trace(rho0);
 
-			// Build magnetization operators in the Hilbert space
-			arma::cx_mat Mx1;
-			arma::cx_mat Mx2;
-			arma::cx_mat My1;
-			arma::cx_mat My2;
-			arma::cx_mat Mp1;
-			arma::cx_mat Mm1;
-			arma::cx_mat Mp2;
-			arma::cx_mat Mm2;
-			if (!space.CreateOperator(arma::conv_to<arma::cx_mat>::from(electron1->Tx()), electron1, Mx1))
+			// Embed *bare* electron spin operators (Sx,Sy,Sz) into the full Hilbert space.
+			// We deliberately build mu operators from rotated g-tensors per orientation (pepper-equivalent).
+			arma::cx_mat Sx1, Sy1, Sz1;
+			arma::cx_mat Sx2, Sy2, Sz2;
+			if (!space.CreateOperator(arma::conv_to<arma::cx_mat>::from(electron1->Sx()), electron1, Sx1) ||
+				!space.CreateOperator(arma::conv_to<arma::cx_mat>::from(electron1->Sy()), electron1, Sy1) ||
+				!space.CreateOperator(arma::conv_to<arma::cx_mat>::from(electron1->Sz()), electron1, Sz1))
 			{
-				this->Log() << "Failed to build magnetization operator for electron \"" << electron1->Name() << "\"." << std::endl;
+				this->Log() << "Failed to build bare spin operators for electron \"" << electron1->Name() << "\"." << std::endl;
 				continue;
 			}
-			if (!space.CreateOperator(arma::conv_to<arma::cx_mat>::from(electron2->Tx()), electron2, Mx2))
+			if (!space.CreateOperator(arma::conv_to<arma::cx_mat>::from(electron2->Sx()), electron2, Sx2) ||
+				!space.CreateOperator(arma::conv_to<arma::cx_mat>::from(electron2->Sy()), electron2, Sy2) ||
+				!space.CreateOperator(arma::conv_to<arma::cx_mat>::from(electron2->Sz()), electron2, Sz2))
 			{
-				this->Log() << "Failed to build magnetization operator for electron \"" << electron2->Name() << "\"." << std::endl;
-				continue;
-			}
-			if (!space.CreateOperator(arma::conv_to<arma::cx_mat>::from(electron1->Ty()), electron1, My1))
-			{
-				this->Log() << "Failed to build magnetization operator for electron \"" << electron1->Name() << "\"." << std::endl;
-				continue;
-			}
-			if (!space.CreateOperator(arma::conv_to<arma::cx_mat>::from(electron2->Ty()), electron2, My2))
-			{
-				this->Log() << "Failed to build magnetization operator for electron \"" << electron2->Name() << "\"." << std::endl;
-				continue;
-			}
-			if (!space.CreateOperator(arma::conv_to<arma::cx_mat>::from(electron1->Sp()), electron1, Mp1))
-			{
-				this->Log() << "Failed to build S+ operator for electron \"" << electron1->Name() << "\"." << std::endl;
-				continue;
-			}
-			if (!space.CreateOperator(arma::conv_to<arma::cx_mat>::from(electron1->Sm()), electron1, Mm1))
-			{
-				this->Log() << "Failed to build S- operator for electron \"" << electron1->Name() << "\"." << std::endl;
-				continue;
-			}
-			if (!space.CreateOperator(arma::conv_to<arma::cx_mat>::from(electron2->Sp()), electron2, Mp2))
-			{
-				this->Log() << "Failed to build S+ operator for electron \"" << electron2->Name() << "\"." << std::endl;
-				continue;
-			}
-			if (!space.CreateOperator(arma::conv_to<arma::cx_mat>::from(electron2->Sm()), electron2, Mm2))
-			{
-				this->Log() << "Failed to build S- operator for electron \"" << electron2->Name() << "\"." << std::endl;
+				this->Log() << "Failed to build bare spin operators for electron \"" << electron2->Name() << "\"." << std::endl;
 				continue;
 			}
 
-			double giso_fad = electron1->GetTensor().Isotropic();
-			double giso_donor = electron2->GetTensor().Isotropic();
-			if (!std::isfinite(giso_fad) || giso_fad == 0.0)
-				giso_fad = 2.0023;
-			if (!std::isfinite(giso_donor) || giso_donor == 0.0)
-				giso_donor = 2.0023;
-
-			const double linewidth_fad = this->LinewidthToOmega(this->linewidthFad_mT, giso_fad);
-			const double linewidth_donor = this->LinewidthToOmega(this->linewidthDonor_mT, giso_donor);
-
-			// Construct grid
+			// Build powder grid (theta,phi) and optional gamma sampling.
 			int numPoints = this->powdersamplingpoints;
 			std::vector<std::tuple<double, double, double>> grid;
 			if (numPoints > 1)
@@ -255,13 +252,9 @@ namespace RunSection
 				}
 				this->Log() << "Using powder averaging with " << numPoints << " orientations." << std::endl;
 				if (this->powderGammaPoints > 1)
-				{
 					this->Log() << "Sampling gamma with " << this->powderGammaPoints << " points per orientation." << std::endl;
-				}
 				if (this->powderFullSphere)
-				{
 					this->Log() << "Using full-sphere powder grid." << std::endl;
-				}
 			}
 			else
 			{
@@ -272,75 +265,156 @@ namespace RunSection
 			const int gamma_points = (numPoints > 1) ? std::max(1, this->powderGammaPoints) : 1;
 			const double gamma_weight = 1.0 / static_cast<double>(gamma_points);
 
-			double total_intensity_x = 0.0;
-			double total_intensity_y = 0.0;
-			double fadx_intensity = 0.0;
-			double donorx_intensity = 0.0;
-			double fady_intensity = 0.0;
-			double donory_intensity = 0.0;
-			double fadp_intensity = 0.0;
-			double fadm_intensity = 0.0;
-			double donorp_intensity = 0.0;
-			double donorm_intensity = 0.0;
+			// Field-domain linewidth (FWHM, Tesla). Pepper broadens in field, not in frequency.
+			// If linewidth_fad and linewidth_donor differ, we use their mean as a single experimental broadening.
+			const double lwB_mT = 0.5 * (std::abs(this->linewidthFad_mT) + std::abs(this->linewidthDonor_mT));
+			const double lwB_T = lwB_mT * 1.0e-3;
 
-			#ifdef _OPENMP
-			#pragma omp parallel for reduction(+ : total_intensity_x, total_intensity_y, fadx_intensity, donorx_intensity, fady_intensity, donory_intensity, fadp_intensity, fadm_intensity, donorp_intensity, donorm_intensity)
-			#endif
+			// Precompute interaction-frame rotation for the Zeeman interaction (g-tensor frame).
+			// IMPORTANT: Interaction framelists must be interpreted with EasySpin's erot ZXZ PASSIVE convention.
+			// SpinSpace::InteractionOperatorRotated() uses the same convention internally.
+			arma::mat RFrame = arma::eye<arma::mat>(3, 3);
+			{
+				auto fr = fieldInteraction->Framelist();
+				double a = (fr.n_elem >= 1) ? fr(0) : 0.0;
+				double b = (fr.n_elem >= 2) ? fr(1) : 0.0;
+				double g = (fr.n_elem >= 3) ? fr(2) : 0.0;
+
+				// EasySpin erot.m matrix (passive ZXZ): R = Rz(g)*Ry(b)*Rz(a)
+				const double ca = std::cos(a), sa = std::sin(a);
+				const double cb = std::cos(b), sb = std::sin(b);
+				const double cg = std::cos(g), sg = std::sin(g);
+
+				arma::mat Ra = {{ca, sa, 0.0}, {-sa, ca, 0.0}, {0.0, 0.0, 1.0}};
+				arma::mat Rb = {{cb, 0.0, -sb}, {0.0, 1.0, 0.0}, {sb, 0.0, cb}};
+				arma::mat Rg = {{cg, sg, 0.0}, {-sg, cg, 0.0}, {0.0, 0.0, 1.0}};
+				RFrame = Rg * Rb * Ra;
+			}
+
+			// Base g-tensors (as specified on spins)
+			arma::mat g1_base = arma::conv_to<arma::mat>::from(electron1->GetTensor().LabFrame());
+			arma::mat g2_base = arma::conv_to<arma::mat>::from(electron2->GetTensor().LabFrame());
+
+			// Accumulators
+			double total_x = 0.0;
+			double total_y = 0.0;
+			double total_perp = 0.0;
+			double fadx = 0.0;
+			double donorx = 0.0;
+			double fady = 0.0;
+			double donory = 0.0;
+			double crossx = 0.0;
+			double crossy = 0.0;
+			double fadp = 0.0;
+			double fadm = 0.0;
+			double donorp = 0.0;
+			double donorm = 0.0;
+
+			// For dH/dB we need the Zeeman Hamiltonian only (rotated per orientation)
+			std::vector<std::string> zeelist;
+			zeelist.push_back(fieldInteraction->Name());
+
+			const arma::cx_double I(0.0, 1.0);
+
+#ifdef _OPENMP
+#pragma omp parallel for reduction(+ : total_x, total_y, total_perp, fadx, donorx, fady, donory, crossx, crossy, fadp, fadm, donorp, donorm)
+#endif
 			for (int grid_num = 0; grid_num < numPoints; ++grid_num)
 			{
-				auto [theta, phi, weight] = grid[grid_num];
-
-				const double base_weight = weight;
+				auto [theta, phi, w_solid] = grid[grid_num];
+				const double base_weight = w_solid;
 
 				for (int gamma_idx = 0; gamma_idx < gamma_points; ++gamma_idx)
 				{
 					double gamma = 0.0;
 					if (gamma_points > 1)
-					{
 						gamma = 2.0 * arma::datum::pi * (static_cast<double>(gamma_idx) + 0.5) / static_cast<double>(gamma_points);
-					}
-					double weight = base_weight * gamma_weight;
 
-					arma::mat Rot_mat;
-					if (!this->CreateRotationMatrix(phi, theta, gamma, Rot_mat))
-					{
+					const double w = base_weight * gamma_weight;
+
+					arma::mat Rot;
+					if (!this->CreateRotationMatrix(phi, theta, gamma, Rot))
 						continue;
-					}
 
+					// Rot is an ACTIVE rotation. SpinSpace::InteractionOperatorRotated() will transpose it internally
+					// to obtain the PASSIVE tensor rotation used for anisotropic couplings. To keep microwave operators
+					// consistent with the Hamiltonian orientation, we use the same PASSIVE matrix here.
+					const arma::mat Rpowder = Rot.t();
+
+					// Build rotated base Hamiltonian
 					arma::sp_cx_mat H0_sp;
-					if (!space.BaseHamiltonianRotated(h0list, Rot_mat, H0_sp))
-					{
+					if (!space.BaseHamiltonianRotated(h0list, Rot, H0_sp))
 						continue;
-					}
 
-					arma::cx_mat H = arma::cx_mat(H0_sp);
+					arma::cx_mat H0 = arma::cx_mat(H0_sp);
 					arma::vec eigval;
 					arma::cx_mat eigvec;
-					if (!arma::eig_sym(eigval, eigvec, H))
-					{
+					if (!arma::eig_sym(eigval, eigvec, H0))
 						continue;
+
+					const arma::cx_mat Udag = arma::trans(arma::conj(eigvec));
+					const arma::cx_mat rho_eig = Udag * rho0 * eigvec;
+
+					// Zeeman-only rotated Hamiltonian -> dH/dB magnitude for Jacobian (pepper dBdE mapping)
+					arma::sp_cx_mat Hz_sp;
+					if (!space.BaseHamiltonianRotated(zeelist, Rot, Hz_sp))
+						continue;
+					arma::cx_mat dHdB = arma::cx_mat(Hz_sp) / Bmag; // rad/ns/T
+					arma::cx_mat dHdB_eig = Udag * dHdB * eigvec;
+					arma::vec dHdB_diag = arma::real(arma::diagvec(dHdB_eig));
+
+					// Rotate g-tensors to interaction frame, then to lab using the PASSIVE powder rotation (Rpowder).
+					arma::mat g1 = RFrame * g1_base * RFrame.t();
+					arma::mat g2 = RFrame * g2_base * RFrame.t();
+					g1 = Rpowder * g1 * Rpowder.t();
+					g2 = Rpowder * g2 * Rpowder.t();
+					if (!this->fullTensorRotation)
+					{
+						g1 = g1 % arma::eye<arma::mat>(3, 3);
+						g2 = g2 % arma::eye<arma::mat>(3, 3);
 					}
 
-					arma::cx_mat Udag = arma::trans(arma::conj(eigvec));
-					arma::cx_mat rho_eig = Udag * rho0 * eigvec;
-					arma::cx_mat Mx1_eig = Udag * Mx1 * eigvec;
-					arma::cx_mat Mx2_eig = Udag * Mx2 * eigvec;
-					arma::cx_mat My1_eig = Udag * My1 * eigvec;
-					arma::cx_mat My2_eig = Udag * My2 * eigvec;
-					arma::cx_mat Mp1_eig = Udag * Mp1 * eigvec;
-					arma::cx_mat Mm1_eig = Udag * Mm1 * eigvec;
-					arma::cx_mat Mp2_eig = Udag * Mp2 * eigvec;
-					arma::cx_mat Mm2_eig = Udag * Mm2 * eigvec;
+					// mu_j = sum_i g_{i,j} S_i  (j = x,y in lab)
+					arma::cx_mat mux1 = g1(0, 0) * Sx1 + g1(1, 0) * Sy1 + g1(2, 0) * Sz1;
+					arma::cx_mat muy1 = g1(0, 1) * Sx1 + g1(1, 1) * Sy1 + g1(2, 1) * Sz1;
+					arma::cx_mat mux2 = g2(0, 0) * Sx2 + g2(1, 0) * Sy2 + g2(2, 0) * Sz2;
+					arma::cx_mat muy2 = g2(0, 1) * Sx2 + g2(1, 1) * Sy2 + g2(2, 1) * Sz2;
 
-					double fadx_local = 0.0;
-					double donorx_local = 0.0;
-					double fady_local = 0.0;
-					double donory_local = 0.0;					
-					double fadp_local = 0.0;
-					double fadm_local = 0.0;
-					double donorp_local = 0.0;
-					double donorm_local = 0.0;
+					arma::cx_mat muxT = mux1 + mux2;
+					arma::cx_mat muyT = muy1 + muy2;
+
+					arma::cx_mat mup1 = mux1 + I * muy1;
+					arma::cx_mat mum1 = mux1 - I * muy1;
+					arma::cx_mat mup2 = mux2 + I * muy2;
+					arma::cx_mat mum2 = mux2 - I * muy2;
+
+					// Transform mu operators into eigenbasis
+					arma::cx_mat mux1_eig = Udag * mux1 * eigvec;
+					arma::cx_mat mux2_eig = Udag * mux2 * eigvec;
+					arma::cx_mat muy1_eig = Udag * muy1 * eigvec;
+					arma::cx_mat muy2_eig = Udag * muy2 * eigvec;
+					arma::cx_mat muxT_eig = Udag * muxT * eigvec;
+					arma::cx_mat muyT_eig = Udag * muyT * eigvec;
+					arma::cx_mat mup1_eig = Udag * mup1 * eigvec;
+					arma::cx_mat mum1_eig = Udag * mum1 * eigvec;
+					arma::cx_mat mup2_eig = Udag * mup2 * eigvec;
+					arma::cx_mat mum2_eig = Udag * mum2 * eigvec;
+
 					const arma::uword dim = eigval.n_elem;
+
+					double loc_total_x = 0.0;
+					double loc_total_y = 0.0;
+					double loc_total_perp = 0.0;
+					double loc_fadx = 0.0;
+					double loc_donorx = 0.0;
+					double loc_fady = 0.0;
+					double loc_donory = 0.0;
+					double loc_crossx = 0.0;
+					double loc_crossy = 0.0;
+					double loc_fadp = 0.0;
+					double loc_fadm = 0.0;
+					double loc_donorp = 0.0;
+					double loc_donorm = 0.0;
 
 					for (arma::uword m = 0; m < dim; ++m)
 					{
@@ -349,93 +423,97 @@ namespace RunSection
 						{
 							const double rho_nn = std::real(rho_eig(n, n));
 							const double population = rho_mm - rho_nn;
-							const double delta = (eigval(n) - eigval(m)) - omega_mw;
+							if (std::abs(population) < 1e-15)
+								continue;
 
-							const double mx1 = std::norm(Mx1_eig(m, n));
-							const double mx2 = std::norm(Mx2_eig(m, n));
-							const double my1 = std::norm(My1_eig(m, n));
-							const double my2 = std::norm(My2_eig(m, n));							
-							const double mp1 = std::norm(Mp1_eig(m, n));
-							const double mm1 = std::norm(Mm1_eig(m, n));
-							const double mp2 = std::norm(Mp2_eig(m, n));
-							const double mm2 = std::norm(Mm2_eig(m, n));
+							const double deltaOmega = (eigval(n) - eigval(m)) - omega_mw; // rad/ns
+							const double domega_dB = dHdB_diag(n) - dHdB_diag(m); // rad/ns/T
+							const double abs_domega_dB = std::abs(domega_dB);
+							if (!std::isfinite(abs_domega_dB) || abs_domega_dB < 1e-15)
+								continue;
 
-							fadx_local += population * mx1 * this->LineshapeValue(delta, linewidth_fad);
-							donorx_local += population * mx2 * this->LineshapeValue(delta, linewidth_donor);
-							fady_local += population * my1 * this->LineshapeValue(delta, linewidth_fad);
-							donory_local += population * my2 * this->LineshapeValue(delta, linewidth_donor);							
-							fadp_local += population * mp1 * this->LineshapeValue(delta, linewidth_fad);
-							fadm_local += population * mm1 * this->LineshapeValue(delta, linewidth_fad);
-							donorp_local += population * mp2 * this->LineshapeValue(delta, linewidth_donor);
-							donorm_local += population * mm2 * this->LineshapeValue(delta, linewidth_donor);
+							const double dBdE = 1.0 / abs_domega_dB; // T / (rad/ns)
+							// EasySpin/pepper safeguard: the 1/g factor (dB/dE) can diverge when
+							// d(E_n-E_m)/dB \approx 0 (near avoided crossings / degeneracies).
+							// Pepper aborts if this gets too large; we emulate that behavior by
+							// skipping those transitions to avoid unphysical spikes.
+							if (dBdE > 1e5)
+								continue;
+
+							const double deltaB = deltaOmega * dBdE;  // T
+
+							const double L = this->LineshapeValue(deltaB, lwB_T);
+							if (L == 0.0)
+								continue;
+
+							const double wField = dBdE * L;
+
+							// x-channel
+							const arma::cx_double mu1x = mux1_eig(m, n);
+							const arma::cx_double mu2x = mux2_eig(m, n);
+							const arma::cx_double muTx = muxT_eig(m, n);
+							const double I1x = std::norm(mu1x);
+							const double I2x = std::norm(mu2x);
+							const double ITx = std::norm(muTx);
+							const double ICx = 2.0 * std::real(mu1x * std::conj(mu2x));
+
+							// y-channel
+							const arma::cx_double mu1y = muy1_eig(m, n);
+							const arma::cx_double mu2y = muy2_eig(m, n);
+							const arma::cx_double muTy = muyT_eig(m, n);
+							const double I1y = std::norm(mu1y);
+							const double I2y = std::norm(mu2y);
+							const double ITy = std::norm(muTy);
+							const double ICy = 2.0 * std::real(mu1y * std::conj(mu2y));
+
+							loc_total_x += population * ITx * wField;
+							loc_total_y += population * ITy * wField;
+							loc_total_perp += population * 0.5 * (ITx + ITy) * wField;
+
+							loc_fadx += population * I1x * wField;
+							loc_donorx += population * I2x * wField;
+							loc_crossx += population * ICx * wField;
+
+							loc_fady += population * I1y * wField;
+							loc_donory += population * I2y * wField;
+							loc_crossy += population * ICy * wField;
+
+							// circular components (for diagnostics)
+							loc_fadp += population * std::norm(mup1_eig(m, n)) * wField;
+							loc_fadm += population * std::norm(mum1_eig(m, n)) * wField;
+							loc_donorp += population * std::norm(mup2_eig(m, n)) * wField;
+							loc_donorm += population * std::norm(mum2_eig(m, n)) * wField;
 						}
 					}
 
-					fadx_intensity += weight * fadx_local;
-					donorx_intensity += weight * donorx_local;
-
-					fady_intensity += weight * fady_local;
-					donory_intensity += weight * donory_local;
-
-					fadp_intensity += weight * fadp_local;
-					fadm_intensity += weight * fadm_local;
-					donorp_intensity += weight * donorp_local;
-					donorm_intensity += weight * donorm_local;
-
-					total_intensity_x += weight * (fadx_local + donorx_local);
-					total_intensity_y += weight * (fady_local + donory_local);
+					total_x += w * loc_total_x;
+					total_y += w * loc_total_y;
+					total_perp += w * loc_total_perp;
+					fadx += w * loc_fadx;
+					donorx += w * loc_donorx;
+					fady += w * loc_fady;
+					donory += w * loc_donory;
+					crossx += w * loc_crossx;
+					crossy += w * loc_crossy;
+					fadp += w * loc_fadp;
+					fadm += w * loc_fadm;
+					donorp += w * loc_donorp;
+					donorm += w * loc_donorm;
 				}
 			}
 
-			// Determine field strength for output
-			double field_mT = 0.0;
-			SpinAPI::interaction_ptr fieldInteraction = nullptr;
-			if (!this->fieldInteractionName.empty())
-			{
-				fieldInteraction = (*i)->interactions_find(this->fieldInteractionName);
-			}
-
-			if (fieldInteraction == nullptr)
-			{
-				for (auto inter = (*i)->interactions_cbegin(); inter != (*i)->interactions_cend(); inter++)
-				{
-					std::string type;
-					if ((*inter)->Properties()->Get("type", type))
-					{
-						type = ToLower(type);
-						if (type == "zeeman")
-						{
-							fieldInteraction = (*inter);
-							break;
-						}
-					}
-				}
-			}
-
-			if (fieldInteraction != nullptr)
-			{
-				arma::vec field = fieldInteraction->Field();
-				if (field.n_elem == 3)
-				{
-					if (std::abs(field(0)) < 1e-12 && std::abs(field(1)) < 1e-12)
-					{
-						field_mT = 1.0e3 * field(2);
-					}
-					else
-					{
-						field_mT = 1.0e3 * arma::norm(field);
-					}
-				}
-			}
-
+			// Output
 			this->Data() << this->RunSettings()->CurrentStep() << " ";
 			this->Data() << this->RunSettings()->Time() << " ";
 			this->WriteStandardOutput(this->Data());
-			this->Data() << field_mT << " " << total_intensity_x << " " << total_intensity_y << " " << fadx_intensity << " " << donorx_intensity  << " " << fady_intensity << " " << donory_intensity
-						 << " " << fadp_intensity << " " << fadm_intensity << " " << donorp_intensity << " " << donorm_intensity << std::endl;
+			this->Data() << field_mT << " "
+						<< total_x << " " << total_y << " " << total_perp << " "
+						<< fadx << " " << donorx << " " << crossx << " "
+						<< fady << " " << donory << " " << crossy << " "
+						<< fadp << " " << fadm << " " << donorp << " " << donorm
+						<< std::endl;
 		}
 
-		//this->Data() << std::endl;
 		return true;
 	}
 
@@ -466,19 +544,30 @@ namespace RunSection
 
 	bool TaskStaticHSTrEPRSpectra::CreateRotationMatrix(double &_alpha, double &_beta, double &_gamma, arma::mat &_R) const
 	{
+		// IMPORTANT: This must return an *ACTIVE* rotation matrix.
+		// SpinSpace::InteractionOperatorRotated() interprets the supplied powder matrix as ACTIVE and
+		// internally transposes it to obtain the PASSIVE tensor-rotation used for coupling tensors.
+		//
+		// This implementation matches the convention used in other HS powder tasks in MolSpin:
+		// R = Rz(alpha) * Ry(beta) * Rz(gamma) with
+		// Rz = [[c,-s,0],[s,c,0],[0,0,1]] and Ry = [[c,0,s],[0,1,0],[-s,0,c]].
+		const double ca = std::cos(_alpha), sa = std::sin(_alpha);
+		const double cb = std::cos(_beta), sb = std::sin(_beta);
+		const double cg = std::cos(_gamma), sg = std::sin(_gamma);
+
 		arma::mat R1 = {
-			{std::cos(_alpha), -std::sin(_alpha), 0.0},
-			{std::sin(_alpha), std::cos(_alpha), 0.0},
+			{ca, -sa, 0.0},
+			{sa,  ca, 0.0},
 			{0.0, 0.0, 1.0}};
 
 		arma::mat R2 = {
-			{std::cos(_beta), 0.0, std::sin(_beta)},
+			{cb, 0.0, sb},
 			{0.0, 1.0, 0.0},
-			{-std::sin(_beta), 0.0, std::cos(_beta)}};
+			{-sb, 0.0, cb}};
 
 		arma::mat R3 = {
-			{std::cos(_gamma), -std::sin(_gamma), 0.0},
-			{std::sin(_gamma), std::cos(_gamma), 0.0},
+			{cg, -sg, 0.0},
+			{sg,  cg, 0.0},
 			{0.0, 0.0, 1.0}};
 
 		_R = R1 * R2 * R3;
@@ -528,11 +617,17 @@ namespace RunSection
 		{
 			_stream << (*i)->Name() << ".Field_mT ";
 			_stream << (*i)->Name() << ".Total_x ";
-			_stream << (*i)->Name() << ".Total_y ";			
+			_stream << (*i)->Name() << ".Total_y ";
+			_stream << (*i)->Name() << ".Total_perp ";
+
 			_stream << (*i)->Name() << ".FADx ";
 			_stream << (*i)->Name() << ".Donorx ";
+			_stream << (*i)->Name() << ".Cross_x ";
+
 			_stream << (*i)->Name() << ".FADy ";
-			_stream << (*i)->Name() << ".Donory ";			
+			_stream << (*i)->Name() << ".Donory ";
+			_stream << (*i)->Name() << ".Cross_y ";
+
 			_stream << (*i)->Name() << ".FADp ";
 			_stream << (*i)->Name() << ".FADm ";
 			_stream << (*i)->Name() << ".Donorp ";

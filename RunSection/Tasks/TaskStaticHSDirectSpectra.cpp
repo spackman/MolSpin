@@ -102,6 +102,10 @@ namespace RunSection
 			// Obtain a SpinSpace to describe the system
 			SpinAPI::SpinSpace space(*(*i));
 			space.UseSuperoperatorSpace(false);
+			
+			this->Properties()->Get("powderfullsphere", this->powderFullSphere);
+		    this->Properties()->Get("fulltensorrotation", this->fullTensorRotation);
+			
 			space.UseFullTensorRotation(this->fullTensorRotation);
 			space.SetReactionOperatorType(this->reactionOperators);
 			if (this->fullTensorRotation)
