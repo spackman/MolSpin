@@ -556,6 +556,11 @@ namespace RunSection
 		return this->runsection.WriteOutput(_stream);
 	}
 
+	const std::vector<std::shared_ptr<Action>> &BasicTask::Actions() const
+	{
+		return this->runsection.actions;
+	}
+
 	// Sets a reference to the requested ActionScalar
 	bool BasicTask::Scalar(std::string _name, ActionScalar **_scalar)
 	{

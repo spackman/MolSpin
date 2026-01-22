@@ -6,6 +6,7 @@
 // See LICENSE.txt for license information.
 /////////////////////////////////////////////////////////////////////////
 #include <algorithm>
+#include <cctype>
 #include <iostream>
 #include "TaskStaticHSDirectSpectra.h"
 #include "Transition.h"
@@ -28,6 +29,53 @@ namespace RunSection
 {
 	namespace
 	{
+		enum class OutputComponent
+		{
+			X,
+			Y,
+			Z,
+			P,
+			M
+		};
+
+		struct SpinOperatorSet
+		{
+			SpinAPI::spin_ptr spin;
+			arma::sp_cx_mat Sx;
+			arma::sp_cx_mat Sy;
+			arma::sp_cx_mat Sz;
+			arma::sp_cx_mat Sp;
+			arma::sp_cx_mat Sm;
+		};
+
+		struct OutputOpDescriptor
+		{
+			size_t spin_index = 0;
+			OutputComponent component = OutputComponent::X;
+			arma::sp_cx_mat projector;
+			double scale = 1.0;
+			bool use_projector = false;
+		};
+
+		arma::mat PassiveZXZRotation(const arma::vec &framelist)
+		{
+			arma::mat RFrame = arma::eye<arma::mat>(3, 3);
+			double a = (framelist.n_elem >= 1) ? framelist(0) : 0.0;
+			double b = (framelist.n_elem >= 2) ? framelist(1) : 0.0;
+			double g = (framelist.n_elem >= 3) ? framelist(2) : 0.0;
+
+			// Passive ZXZ Euler rotation: R = Rz(gamma) * Ry(beta) * Rz(alpha)
+			const double ca = std::cos(a), sa = std::sin(a);
+			const double cb = std::cos(b), sb = std::sin(b);
+			const double cg = std::cos(g), sg = std::sin(g);
+
+			arma::mat Ra = {{ca, sa, 0.0}, {-sa, ca, 0.0}, {0.0, 0.0, 1.0}};
+			arma::mat Rb = {{cb, 0.0, -sb}, {0.0, 1.0, 0.0}, {sb, 0.0, cb}};
+			arma::mat Rg = {{cg, sg, 0.0}, {-sg, cg, 0.0}, {0.0, 0.0, 1.0}};
+			RFrame = Rg * Rb * Ra;
+			return RFrame;
+		}
+
 		double TraceSparseDense(const arma::sp_cx_mat &A, const arma::cx_mat &B)
 		{
 			arma::cx_double sum = arma::cx_double(0.0, 0.0);
@@ -36,6 +84,110 @@ namespace RunSection
 				sum += (*it) * B(it.col(), it.row());
 			}
 			return std::real(sum);
+		}
+
+		double TraceDenseTransposed(const arma::cx_mat &A, const arma::cx_mat &B_t)
+		{
+			return std::real(arma::accu(A % B_t));
+		}
+
+		bool ResolveFieldInteraction(const SpinAPI::system_ptr &system, const std::string &fieldInteractionName, SpinAPI::interaction_ptr &fieldInteraction)
+		{
+			fieldInteraction = nullptr;
+			if (system == nullptr)
+				return false;
+
+			if (!fieldInteractionName.empty())
+				fieldInteraction = system->interactions_find(fieldInteractionName);
+
+			if (fieldInteraction == nullptr)
+			{
+				for (auto inter = system->interactions_cbegin(); inter != system->interactions_cend(); inter++)
+				{
+					std::string type;
+					if ((*inter)->Properties()->Get("type", type))
+					{
+						std::transform(type.begin(), type.end(), type.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+						if (type == "zeeman")
+						{
+							fieldInteraction = (*inter);
+							break;
+						}
+					}
+				}
+			}
+
+			return (fieldInteraction != nullptr);
+		}
+
+		bool ResolveSpinsByName(const SpinAPI::system_ptr &system, const std::vector<std::string> &names, std::vector<SpinAPI::spin_ptr> &spins)
+		{
+			spins.clear();
+			if (system == nullptr)
+				return false;
+			for (const auto &name : names)
+			{
+				auto spin = system->spins_find(name);
+				if (spin == nullptr)
+					return false;
+				bool exists = false;
+				for (const auto &existing : spins)
+				{
+					if (existing == spin)
+					{
+						exists = true;
+						break;
+					}
+				}
+				if (!exists)
+					spins.push_back(spin);
+			}
+			return true;
+		}
+
+		[[maybe_unused]] void SecularizeHamiltonian(arma::sp_cx_mat &H, const arma::vec &mz_diag, double tol)
+		{
+			if (H.n_rows != H.n_cols || H.n_rows != mz_diag.n_elem)
+				return;
+
+			if (!std::isfinite(tol) || tol < 0.0)
+				tol = 0.0;
+
+			arma::sp_cx_mat filtered = arma::zeros<arma::sp_cx_mat>(H.n_rows, H.n_cols);
+			for (auto it = H.begin(); it != H.end(); ++it)
+			{
+				if (std::abs(mz_diag(it.row()) - mz_diag(it.col())) <= tol)
+					filtered(it.row(), it.col()) = (*it);
+			}
+			H = std::move(filtered);
+		}
+
+		void SecularizeHamiltonianEigenbasis(arma::sp_cx_mat &H, const arma::vec &energies, const arma::cx_mat &eigvec, double tol)
+		{
+			if (H.n_rows != H.n_cols || H.n_rows != energies.n_elem || eigvec.n_rows != H.n_rows || eigvec.n_cols != H.n_rows)
+				return;
+
+			if (!std::isfinite(tol) || tol < 0.0)
+				tol = 0.0;
+
+			arma::cx_mat H_dense = arma::cx_mat(H);
+			H_dense = 0.5 * (H_dense + H_dense.st());
+			const arma::cx_mat Udag = arma::trans(arma::conj(eigvec));
+			arma::cx_mat H_eig = Udag * H_dense * eigvec;
+
+			const arma::uword dim = energies.n_elem;
+			for (arma::uword r = 0; r < dim; ++r)
+			{
+				for (arma::uword c = 0; c < dim; ++c)
+				{
+					if (std::abs(energies(r) - energies(c)) > tol)
+						H_eig(r, c) = arma::cx_double(0.0, 0.0);
+				}
+			}
+
+			H_dense = eigvec * H_eig * Udag;
+			H_dense = 0.5 * (H_dense + H_dense.st());
+			H = arma::sp_cx_mat(H_dense);
 		}
 	}
 
@@ -46,9 +198,15 @@ namespace RunSection
 		: BasicTask(_parser, _runsection),
 		  timestep(1.0),
 		  totaltime(1.0e+4),
+		  mwFrequencyGHz(0.0),
+		  secularTolerance(1e-6),
 		  powderGammaPoints(1),
 		  powderFullSphere(true),
 		  fullTensorRotation(true),
+		  rwaEnabled(false),
+		  secularizeInteractions(false),
+		  fieldInteractionName(""),
+		  rwaSpinNames(),
 		  reactionOperators(SpinAPI::ReactionOperatorType::Haberkorn)
 	{
 	}
@@ -222,29 +380,52 @@ namespace RunSection
 				this->Log() << "Failed to obtain input for CIDSP. Using default false." << std::endl;
 			}
 
-		// Get projectors of interest of the spectrum
-		arma::sp_cx_mat Iprojx;
-		arma::sp_cx_mat Iprojy;
-		arma::sp_cx_mat Iprojz;
-		arma::sp_cx_mat Iprojp;
-		arma::sp_cx_mat Iprojm;
-
+			// Get projectors of interest of the spectrum
 			std::vector<std::string> spinList;
+			const bool hasSpinList = this->Properties()->GetList("spinlist", spinList, ',');
 			int m;
 
 			// Check transitions, rates and projection operators
 			auto transitions = (*i)->Transitions();
 			arma::sp_cx_mat P;
-			int num_transitions = 0;
 
-			int projection_counter = 0;
-			std::map<int, arma::sp_cx_mat> Operators;
-			std::vector<arma::sp_cx_mat> OperatorsSparse;
-			std::vector<arma::cx_mat> OperatorsDense;
-			arma::vec rates(1, 1);
+			std::vector<SpinOperatorSet> detect_ops;
+			std::vector<arma::mat> detect_g_frame_base;
+			std::vector<OutputOpDescriptor> output_desc;
+
+			const bool rwa_enabled = this->rwaEnabled;
+			const bool secularize = this->secularizeInteractions;
+			const bool need_field_interaction = hasSpinList || rwa_enabled || secularize;
+
+			SpinAPI::interaction_ptr fieldInteraction = nullptr;
+			bool have_field_interaction = false;
+			arma::mat RFrame = arma::eye<arma::mat>(3, 3);
+			arma::vec Bvec;
+			double Bmag = 0.0;
+			double mu_prefactor = 1.0;
+			if (need_field_interaction)
+			{
+				have_field_interaction = ResolveFieldInteraction((*i), this->fieldInteractionName, fieldInteraction);
+				if (!have_field_interaction)
+				{
+					this->Log() << "Failed to resolve Zeeman interaction in SpinSystem \"" << (*i)->Name() << "\"." << std::endl;
+				}
+				else
+				{
+					RFrame = PassiveZXZRotation(fieldInteraction->Framelist());
+					Bvec = fieldInteraction->Field();
+					if (Bvec.n_elem == 3)
+					{
+						Bmag = arma::norm(Bvec);
+					}
+					mu_prefactor = fieldInteraction->Prefactor();
+					if (fieldInteraction->AddCommonPrefactor())
+						mu_prefactor *= 8.79410005e+1;
+				}
+			}
 
 			// Getting the projection operators
-			if (this->Properties()->GetList("spinlist", spinList, ','))
+			if (hasSpinList)
 			{
 				for (auto l = (*i)->spins_cbegin(); l != (*i)->spins_cend(); l++)
 				{
@@ -252,29 +433,31 @@ namespace RunSection
 					{
 						if ((*l)->Name() == spinList[m])
 						{
-							if (!space.CreateOperator(arma::conv_to<arma::sp_cx_mat>::from((*l)->Sx()), (*l), Iprojx))
-							{
+							SpinOperatorSet ops;
+							ops.spin = (*l);
+							if (!space.CreateOperator(arma::conv_to<arma::sp_cx_mat>::from((*l)->Sx()), (*l), ops.Sx))
 								return false;
-							}
-								if (!space.CreateOperator(arma::conv_to<arma::sp_cx_mat>::from((*l)->Sy()), (*l), Iprojy))
-							{
+							if (!space.CreateOperator(arma::conv_to<arma::sp_cx_mat>::from((*l)->Sy()), (*l), ops.Sy))
 								return false;
-							}
-							if (!space.CreateOperator(arma::conv_to<arma::sp_cx_mat>::from((*l)->Sz()), (*l), Iprojz))
-							{
+							if (!space.CreateOperator(arma::conv_to<arma::sp_cx_mat>::from((*l)->Sz()), (*l), ops.Sz))
 								return false;
-							}
+							if (!space.CreateOperator(arma::conv_to<arma::sp_cx_mat>::from((*l)->Sp()), (*l), ops.Sp))
+								return false;
+							if (!space.CreateOperator(arma::conv_to<arma::sp_cx_mat>::from((*l)->Sm()), (*l), ops.Sm))
+								return false;
 
-							if (!space.CreateOperator(arma::conv_to<arma::sp_cx_mat>::from((*l)->Sp()), (*l), Iprojp))
+							detect_ops.push_back(ops);
+							arma::mat g_frame = arma::eye<arma::mat>(3, 3);
+							if (have_field_interaction && fieldInteraction != nullptr)
 							{
-								return false;
+								arma::mat g_base = arma::conv_to<arma::mat>::from((*l)->GetTensor().LabFrame());
+								if (fieldInteraction->IgnoreTensors())
+									g_base = arma::eye<arma::mat>(3, 3);
+								g_frame = RFrame * g_base * RFrame.t();
 							}
+							detect_g_frame_base.push_back(g_frame);
 
-							if (!space.CreateOperator(arma::conv_to<arma::sp_cx_mat>::from((*l)->Sm()), (*l), Iprojm))
-							{
-								return false;
-							}
-
+							const size_t spin_index = detect_ops.size() - 1;
 							if (CIDSP == true)
 							{
 								// Gather rates and operators
@@ -285,82 +468,139 @@ namespace RunSection
 									if (!space.GetState((*j)->SourceState(), P))
 									{
 										this->Log() << "Failed to obtain projection matrix onto state \"" << (*j)->Name() << "\" of SpinSystem \"" << (*i)->Name() << "\"." << std::endl;
-										return 1;
-									}
-									if (num_transitions != 0)
-									{
-										rates.insert_rows(num_transitions, 1);
+										return false;
 									}
 
-									Operators[projection_counter] = (*j)->Rate() * Iprojx * P;
-									projection_counter += 1;
-									Operators[projection_counter] = (*j)->Rate() * Iprojy * P;
-									projection_counter += 1;
-									Operators[projection_counter] = (*j)->Rate() * Iprojz * P;
-									projection_counter += 1;
-									Operators[projection_counter] = (*j)->Rate() * Iprojp * P;
-									projection_counter += 1;
-									Operators[projection_counter] = (*j)->Rate() * Iprojm * P;
-									projection_counter += 1;
-
-									rates(num_transitions) = (*j)->Rate();
-									num_transitions++;
+									OutputOpDescriptor desc;
+									desc.spin_index = spin_index;
+									desc.use_projector = true;
+									desc.projector = P;
+									desc.scale = (*j)->Rate();
+									desc.component = OutputComponent::X;
+									output_desc.push_back(desc);
+									desc.component = OutputComponent::Y;
+									output_desc.push_back(desc);
+									desc.component = OutputComponent::Z;
+									output_desc.push_back(desc);
+									desc.component = OutputComponent::P;
+									output_desc.push_back(desc);
+									desc.component = OutputComponent::M;
+									output_desc.push_back(desc);
 								}
 							}
 							else
 							{
-								// Gather rates and operators
-								Operators[projection_counter] = Iprojx;
-								projection_counter += 1;
-								Operators[projection_counter] = Iprojy;
-								projection_counter += 1;
-								Operators[projection_counter] = Iprojz;
-								projection_counter += 1;
-								Operators[projection_counter] = Iprojp;
-								projection_counter += 1;
-								Operators[projection_counter] = Iprojm;
-								projection_counter += 1;
-							
-								for (auto j = transitions.cbegin(); j != transitions.cend(); j++)
-								{
-									if ((*j)->SourceState() == nullptr)
-										continue;
-
-									if (num_transitions != 0)
-									{
-										rates.insert_rows(num_transitions, 1);
-									}
-
-									rates(num_transitions) = (*j)->Rate();
-									num_transitions++;
-								}
+								OutputOpDescriptor desc;
+								desc.spin_index = spin_index;
+								desc.use_projector = false;
+								desc.scale = 1.0;
+								desc.component = OutputComponent::X;
+								output_desc.push_back(desc);
+								desc.component = OutputComponent::Y;
+								output_desc.push_back(desc);
+								desc.component = OutputComponent::Z;
+								output_desc.push_back(desc);
+								desc.component = OutputComponent::P;
+								output_desc.push_back(desc);
+								desc.component = OutputComponent::M;
+								output_desc.push_back(desc);
 							}
-						}	
+						}
 					}
 				}
 			}
 
-			OperatorsSparse.resize(projection_counter);
-			double total_nnz = 0.0;
-			double total_size = 0.0;
-			for (const auto &entry : Operators)
+			const int projection_counter = static_cast<int>(output_desc.size());
+
+			const bool have_valid_field = have_field_interaction && (Bvec.n_elem == 3) && std::isfinite(Bmag) && (Bmag > 0.0);
+			std::vector<SpinAPI::spin_ptr> rwaSpins;
+			std::vector<SpinOperatorSet> rwa_ops;
+			std::vector<arma::mat> rwa_g_frame_base;
+			std::vector<std::string> zeelist;
+
+			if (rwa_enabled || secularize)
 			{
-				OperatorsSparse[entry.first] = entry.second;
-				total_nnz += static_cast<double>(entry.second.n_nonzero);
-				total_size += static_cast<double>(entry.second.n_rows) * entry.second.n_cols;
-			}
-			bool use_sparse_ops = (total_size > 0.0) && ((total_nnz / total_size) < 0.1);
-			if (!use_sparse_ops)
-			{
-				OperatorsDense.resize(projection_counter);
-				for (const auto &entry : Operators)
+				if (!have_field_interaction || fieldInteraction == nullptr)
 				{
-					OperatorsDense[entry.first] = arma::cx_mat(entry.second);
+					this->Log() << "Rotating-frame handling requires a Zeeman interaction in SpinSystem \"" << (*i)->Name() << "\"." << std::endl;
+					if (rwa_enabled)
+						continue;
 				}
-			}
-			else if (projection_counter > 0)
-			{
-				this->Log() << "Using sparse operators for expectation values." << std::endl;
+				else
+				{
+					if (!this->rwaSpinNames.empty())
+					{
+						if (!ResolveSpinsByName((*i), this->rwaSpinNames, rwaSpins))
+						{
+							this->Log() << "Failed to resolve rwaspins list in SpinSystem \"" << (*i)->Name() << "\"." << std::endl;
+						}
+					}
+					else if (!fieldInteraction->Group1().empty())
+					{
+						rwaSpins = fieldInteraction->Group1();
+					}
+					else if (!spinList.empty())
+					{
+						if (!ResolveSpinsByName((*i), spinList, rwaSpins))
+						{
+							this->Log() << "Failed to resolve spinlist for rotating-frame handling in SpinSystem \"" << (*i)->Name() << "\"." << std::endl;
+						}
+					}
+					else
+					{
+						auto allSpins = (*i)->Spins();
+						rwaSpins.assign(allSpins.begin(), allSpins.end());
+					}
+
+					if (rwaSpins.empty())
+					{
+						this->Log() << "No spins available for rotating-frame handling in SpinSystem \"" << (*i)->Name() << "\"." << std::endl;
+						if (rwa_enabled)
+							continue;
+					}
+					else
+					{
+						zeelist.push_back(fieldInteraction->Name());
+						for (const auto &spin : rwaSpins)
+						{
+							SpinOperatorSet ops;
+							ops.spin = spin;
+							if (!space.CreateOperator(arma::conv_to<arma::sp_cx_mat>::from(spin->Sx()), spin, ops.Sx))
+							{
+								this->Log() << "Failed to build Sx operator for rotating-frame spin \"" << spin->Name() << "\"." << std::endl;
+								rwaSpins.clear();
+								break;
+							}
+							if (!space.CreateOperator(arma::conv_to<arma::sp_cx_mat>::from(spin->Sy()), spin, ops.Sy))
+							{
+								this->Log() << "Failed to build Sy operator for rotating-frame spin \"" << spin->Name() << "\"." << std::endl;
+								rwaSpins.clear();
+								break;
+							}
+							if (!space.CreateOperator(arma::conv_to<arma::sp_cx_mat>::from(spin->Sz()), spin, ops.Sz))
+							{
+								this->Log() << "Failed to build Sz operator for rotating-frame spin \"" << spin->Name() << "\"." << std::endl;
+								rwaSpins.clear();
+								break;
+							}
+							rwa_ops.push_back(ops);
+
+							arma::mat g_frame = arma::eye<arma::mat>(3, 3);
+							arma::mat g_base = arma::conv_to<arma::mat>::from(spin->GetTensor().LabFrame());
+							if (fieldInteraction->IgnoreTensors())
+								g_base = arma::eye<arma::mat>(3, 3);
+							g_frame = RFrame * g_base * RFrame.t();
+							rwa_g_frame_base.push_back(g_frame);
+						}
+					}
+				}
+
+				if ((rwa_enabled || secularize) && !have_valid_field)
+				{
+					this->Log() << "Rotating-frame handling requires a valid field vector in SpinSystem \"" << (*i)->Name() << "\"." << std::endl;
+					if (rwa_enabled)
+						continue;
+				}
 			}
 
 			// Get the Hamiltonian
@@ -621,6 +861,14 @@ namespace RunSection
 			std::vector<std::string> HamiltonianH1list;
 			bool hasH0list = this->Properties()->GetList("hamiltonianh0list", HamiltonianH0list, ',');
 			bool hasH1list = this->Properties()->GetList("hamiltonianh1list", HamiltonianH1list, ',');
+			std::vector<std::string> HamiltonianAllList;
+			if (!hasH0list)
+			{
+				for (auto inter = (*i)->interactions_cbegin(); inter != (*i)->interactions_cend(); ++inter)
+				{
+					HamiltonianAllList.push_back((*inter)->Name());
+				}
+			}
 
 			// Read a pulse sequence from the input
 			std::vector<std::tuple<std::string, double>> Pulsesequence;
@@ -628,6 +876,42 @@ namespace RunSection
 			if (hasPulseSequence)
 			{
 				this->Log() << "Pulse sequence:" << std::endl;
+			}
+
+			double omega_mw = 0.0;
+			if (rwa_enabled)
+			{
+				if (this->mwFrequencyGHz > 0.0)
+				{
+					omega_mw = 2.0 * arma::datum::pi * this->mwFrequencyGHz;
+				}
+				else
+				{
+					for (auto pulse = (*i)->pulses_cbegin(); pulse < (*i)->pulses_cend(); pulse++)
+					{
+						if ((*pulse)->Type() == SpinAPI::PulseType::LongPulse)
+						{
+							double freq = (*pulse)->Frequency();
+							if (std::isfinite(freq) && freq > 0.0)
+							{
+								omega_mw = freq;
+								this->Log() << "Using pulse frequency " << freq << " rad/ns for rotating-frame shift." << std::endl;
+								break;
+							}
+						}
+					}
+				}
+
+				if (!(omega_mw > 0.0))
+				{
+					this->Log() << "Rotating-wave approximation requires mwfrequency (rad/ns) or a LongPulse frequency." << std::endl;
+					return false;
+				}
+				this->Log() << "Rotating-wave approximation enabled (omega_mw = " << omega_mw << " rad/ns)." << std::endl;
+				if (secularize)
+				{
+					this->Log() << "Secularizing interactions with energy tolerance " << this->secularTolerance << " rad/ns." << std::endl;
+				}
 			}
 
 			std::vector<double> pulse_times;
@@ -719,11 +1003,10 @@ namespace RunSection
 			{
 				ExptValues.zeros(num_steps, projection_counter);
 			}
-			arma::cx_mat rho_integrated;
+			arma::vec ExptValuesTimeinf;
 			if (method_timeinf)
 			{
-				int dim = InitialStateVector.n_rows * Z;
-				rho_integrated.zeros(dim, dim);
+				ExptValuesTimeinf.zeros(projection_counter);
 			}
 
 			size_t grid_size = grid.size();
@@ -754,14 +1037,13 @@ namespace RunSection
 				}
 			}
 
-			std::vector<arma::cx_mat> rho_integrated_partial;
+			std::vector<arma::vec> ExptValuesTimeinfPartial;
 			if (method_timeinf)
 			{
-				int dim = InitialStateVector.n_rows * Z;
-				rho_integrated_partial.resize(nthreads);
-				for (auto &m : rho_integrated_partial)
+				ExptValuesTimeinfPartial.resize(nthreads);
+				for (auto &m : ExptValuesTimeinfPartial)
 				{
-					m.zeros(dim, dim);
+					m.zeros(projection_counter);
 				}
 			}
 
@@ -819,16 +1101,25 @@ namespace RunSection
 						this->Log() << "Failed to obtain rotation matrix for powder orientation." << std::endl;
 					}
 
-				arma::sp_cx_mat H;
-				if (hasH0list)
-				{
-					arma::sp_cx_mat H0;
-					if (!space_thread.BaseHamiltonianRotated(HamiltonianH0list, Rot_mat, H0))
+					arma::sp_cx_mat H;
+					if (hasH0list)
 					{
-						this->Log() << "Failed to obtain rotated Hamiltonian for SpinSystem \"" << (*i)->Name() << "\"." << std::endl;
-						continue;
+						arma::sp_cx_mat H0;
+						if (!space_thread.BaseHamiltonianRotated(HamiltonianH0list, Rot_mat, H0))
+						{
+							this->Log() << "Failed to obtain rotated Hamiltonian for SpinSystem \"" << (*i)->Name() << "\"." << std::endl;
+							continue;
+						}
+						H = H0;
 					}
-					H = H0;
+					else
+					{
+						if (!space_thread.BaseHamiltonianRotated(HamiltonianAllList, Rot_mat, H))
+						{
+							this->Log() << "Failed to obtain rotated Hamiltonian for SpinSystem \"" << (*i)->Name() << "\"." << std::endl;
+							continue;
+						}
+					}
 
 					if (hasH1list)
 					{
@@ -838,21 +1129,176 @@ namespace RunSection
 							this->Log() << "Failed to obtain Hamiltonian H1 in Hilbert Space." << std::endl;
 							continue;
 						}
-
 						H += H1;
 					}
-				}
-				else
-				{
-					if (!space_thread.Hamiltonian(H))
-					{
-						this->Log() << "Failed to obtain the Hamiltonian in Hilbert Space." << std::endl;
-						continue;
-					}
-				}
 
-				if (use_density_matrix)
-				{
+					const arma::mat Rpowder = Rot_mat.t();
+					std::vector<arma::sp_cx_mat> OperatorsSparseLocal;
+					std::vector<arma::cx_mat> OperatorsDenseLocal;
+					bool use_sparse_ops = false;
+
+					if (projection_counter > 0)
+					{
+						const arma::cx_double imag_unit(0.0, 1.0);
+						std::vector<arma::sp_cx_mat> mu_x(detect_ops.size());
+						std::vector<arma::sp_cx_mat> mu_y(detect_ops.size());
+						std::vector<arma::sp_cx_mat> mu_z(detect_ops.size());
+						std::vector<arma::sp_cx_mat> mu_p(detect_ops.size());
+						std::vector<arma::sp_cx_mat> mu_m(detect_ops.size());
+						bool tensor_dim_ok = true;
+
+						for (size_t spin_idx = 0; spin_idx < detect_ops.size(); ++spin_idx)
+						{
+							arma::mat g = Rpowder * detect_g_frame_base[spin_idx] * Rpowder.t();
+							if (!this->fullTensorRotation)
+								g = g % arma::eye<arma::mat>(3, 3);
+
+							const auto &ops = detect_ops[spin_idx];
+							arma::sp_cx_mat mux = g(0, 0) * ops.Sx + g(1, 0) * ops.Sy + g(2, 0) * ops.Sz;
+							arma::sp_cx_mat muy = g(0, 1) * ops.Sx + g(1, 1) * ops.Sy + g(2, 1) * ops.Sz;
+							arma::sp_cx_mat muz = g(0, 2) * ops.Sx + g(1, 2) * ops.Sy + g(2, 2) * ops.Sz;
+							if (mu_prefactor != 1.0)
+							{
+								mux *= mu_prefactor;
+								muy *= mu_prefactor;
+								muz *= mu_prefactor;
+							}
+							if (mux.n_rows != H.n_rows || mux.n_cols != H.n_cols)
+							{
+								tensor_dim_ok = false;
+								break;
+							}
+							mu_x[spin_idx] = std::move(mux);
+							mu_y[spin_idx] = std::move(muy);
+							mu_z[spin_idx] = std::move(muz);
+							mu_p[spin_idx] = mu_x[spin_idx] + imag_unit * mu_y[spin_idx];
+							mu_m[spin_idx] = mu_x[spin_idx] - imag_unit * mu_y[spin_idx];
+						}
+
+						if (!tensor_dim_ok)
+						{
+							this->Log() << "Magnetic moment operator size mismatch in SpinSystem \"" << (*i)->Name() << "\"." << std::endl;
+							continue;
+						}
+
+						OperatorsSparseLocal.resize(projection_counter);
+						for (int op_idx = 0; op_idx < projection_counter; ++op_idx)
+						{
+							const auto &desc = output_desc[op_idx];
+							arma::sp_cx_mat op;
+							switch (desc.component)
+							{
+							case OutputComponent::X:
+								op = mu_x[desc.spin_index];
+								break;
+							case OutputComponent::Y:
+								op = mu_y[desc.spin_index];
+								break;
+							case OutputComponent::Z:
+								op = mu_z[desc.spin_index];
+								break;
+							case OutputComponent::P:
+								op = mu_p[desc.spin_index];
+								break;
+							case OutputComponent::M:
+								op = mu_m[desc.spin_index];
+								break;
+							}
+
+							if (desc.scale != 1.0)
+								op *= desc.scale;
+							if (desc.use_projector)
+								op = op * desc.projector;
+							OperatorsSparseLocal[op_idx] = std::move(op);
+						}
+
+						double total_nnz = 0.0;
+						double total_size = 0.0;
+						for (const auto &op : OperatorsSparseLocal)
+						{
+							total_nnz += static_cast<double>(op.n_nonzero);
+							total_size += static_cast<double>(op.n_rows) * op.n_cols;
+						}
+						use_sparse_ops = (total_size > 0.0) && ((total_nnz / total_size) < 0.1);
+						if (!use_sparse_ops)
+						{
+							OperatorsDenseLocal.resize(projection_counter);
+							for (int op_idx = 0; op_idx < projection_counter; ++op_idx)
+							{
+								OperatorsDenseLocal[op_idx] = arma::cx_mat(OperatorsSparseLocal[op_idx]);
+							}
+						}
+						else if (grid_num == 0 && gamma_idx == 0)
+						{
+							this->Log() << "Using sparse operators for expectation values." << std::endl;
+						}
+					}
+
+					if (rwa_enabled || secularize)
+					{
+						if (secularize && !zeelist.empty())
+						{
+							arma::sp_cx_mat Hz_sp;
+							if (!space_thread.BaseHamiltonianRotated(zeelist, Rot_mat, Hz_sp))
+							{
+								this->Log() << "Failed to obtain Zeeman Hamiltonian for secularization in SpinSystem \"" << (*i)->Name() << "\"." << std::endl;
+							}
+							else
+							{
+								arma::cx_mat Hz_dense = arma::cx_mat(Hz_sp);
+								Hz_dense = 0.5 * (Hz_dense + Hz_dense.st());
+								arma::vec eigval;
+								arma::cx_mat eigvec;
+								if (!arma::eig_sym(eigval, eigvec, Hz_dense))
+								{
+									this->Log() << "Failed to diagonalize Zeeman Hamiltonian for secularization in SpinSystem \"" << (*i)->Name() << "\"." << std::endl;
+								}
+								else
+								{
+									SecularizeHamiltonianEigenbasis(H, eigval, eigvec, this->secularTolerance);
+								}
+							}
+						}
+
+						if (rwa_enabled)
+						{
+							arma::sp_cx_mat S_eff_total = arma::zeros<arma::sp_cx_mat>(H.n_rows, H.n_cols);
+							bool have_frame = false;
+							for (size_t idx = 0; idx < rwa_ops.size(); ++idx)
+							{
+								arma::mat g = Rpowder * rwa_g_frame_base[idx] * Rpowder.t();
+								if (!this->fullTensorRotation)
+									g = g % arma::eye<arma::mat>(3, 3);
+
+								arma::vec Beff = g * Bvec;
+								double geff = arma::norm(Beff);
+								if (!std::isfinite(geff) || geff <= 0.0)
+									continue;
+
+								const double bx = Beff(0) / geff;
+								const double by = Beff(1) / geff;
+								const double bz = Beff(2) / geff;
+								S_eff_total += bx * rwa_ops[idx].Sx + by * rwa_ops[idx].Sy + bz * rwa_ops[idx].Sz;
+								have_frame = true;
+							}
+
+							if (!have_frame)
+							{
+								this->Log() << "Rotating-frame operator could not be constructed for SpinSystem \"" << (*i)->Name() << "\"." << std::endl;
+								continue;
+							}
+							if (S_eff_total.n_rows != H.n_rows || S_eff_total.n_cols != H.n_cols)
+							{
+								this->Log() << "Rotating-frame operator size mismatch in SpinSystem \"" << (*i)->Name() << "\"." << std::endl;
+								continue;
+							}
+
+							H -= omega_mw * S_eff_total;
+						}
+					}
+
+					if (use_density_matrix)
+					{
 					arma::cx_mat rho = Binitial * Binitial.st();
 					int dim = static_cast<int>(rho.n_rows);
 
@@ -887,10 +1333,11 @@ namespace RunSection
 					const arma::cx_double imag_unit(0.0, 1.0);
 
 					auto record_expectation_rho = [&](arma::mat &target, size_t row_index, const arma::cx_mat &state) {
+						arma::cx_mat state_t = state.t();
 						for (int idx = 0; idx < projection_counter; ++idx)
 						{
-							double val = use_sparse_ops ? (TraceSparseDense(OperatorsSparse[idx], state) / Z)
-														: (std::real(arma::trace(OperatorsDense[idx] * state)) / Z);
+							double val = use_sparse_ops ? (TraceSparseDense(OperatorsSparseLocal[idx], state) / Z)
+														: (TraceDenseTransposed(OperatorsDenseLocal[idx], state_t) / Z);
 							target(row_index, idx) = val;
 						}
 					};
@@ -1082,7 +1529,15 @@ namespace RunSection
 											continue;
 										}
 
-										double pulse_factor = std::cos((*pulse)->Frequency() * pulse_dt);
+										double pulse_factor = 1.0;
+										if (rwa_enabled)
+										{
+											pulse_factor = 0.5;
+										}
+										else
+										{
+											pulse_factor = std::cos((*pulse)->Frequency() * pulse_dt);
+										}
 										unsigned int steps = static_cast<unsigned int>(std::abs((*pulse)->Pulsetime() / pulse_dt));
 										if (relax_use_split_expm)
 										{
@@ -1226,8 +1681,15 @@ namespace RunSection
 							continue;
 						}
 						arma::cx_mat X = arma::reshape(sol, rho0mat.n_rows, rho0mat.n_cols);
+						arma::cx_mat X_t = X.t();
 
-						rho_integrated_partial[tid] += weight * X;
+						arma::vec &acc = ExptValuesTimeinfPartial[tid];
+						for (int idx = 0; idx < projection_counter; ++idx)
+						{
+							double val = use_sparse_ops ? (TraceSparseDense(OperatorsSparseLocal[idx], X) / Z)
+														: (TraceDenseTransposed(OperatorsDenseLocal[idx], X_t) / Z);
+							acc(idx) += weight * val;
+						}
 					}
 
 					if (has_pulse_output)
@@ -1248,11 +1710,11 @@ namespace RunSection
 						arma::cx_mat OB;
 						if (use_sparse_ops)
 						{
-							OB = OperatorsSparse[idx] * state;
+							OB = OperatorsSparseLocal[idx] * state;
 						}
 						else
 						{
-							OB = OperatorsDense[idx] * state;
+							OB = OperatorsDenseLocal[idx] * state;
 						}
 						double abs_trace = std::real(arma::accu(state_conj % OB));
 						target(row_index, idx) = abs_trace / Z;
@@ -1355,8 +1817,19 @@ namespace RunSection
 									// Create array containing a propagator and the current state of each system
 									std::pair<arma::sp_cx_mat, arma::cx_mat> G;
 
+									double pulse_factor = 1.0;
+									if (rwa_enabled)
+									{
+										pulse_factor = 0.5;
+									}
+									else
+									{
+										pulse_factor = std::cos((*pulse)->Frequency() * (*pulse)->Timestep());
+									}
+
 									// Get the propagator and put it into the array together with the initial state
-									arma::sp_cx_mat A_sp = arma::conv_to<arma::sp_cx_mat>::from(arma::expmat(arma::conv_to<arma::cx_mat>::from((A + (arma::cx_double(0.0, -1.0) * pulse_operator * std::cos((*pulse)->Frequency() * (*pulse)->Timestep()))) * (*pulse)->Timestep())));
+									arma::sp_cx_mat A_sp = arma::conv_to<arma::sp_cx_mat>::from(
+										arma::expmat(arma::conv_to<arma::cx_mat>::from((A + (arma::cx_double(0.0, -1.0) * pulse_operator * pulse_factor)) * (*pulse)->Timestep())));
 									G = std::pair<arma::sp_cx_mat, arma::cx_mat>(A_sp, B);
 
 									unsigned int steps = static_cast<unsigned int>(std::abs((*pulse)->Pulsetime() / (*pulse)->Timestep()));
@@ -1436,11 +1909,11 @@ namespace RunSection
 							arma::cx_mat OB;
 							if (use_sparse_ops)
 							{
-								OB = OperatorsSparse[idx] * B;
+								OB = OperatorsSparseLocal[idx] * B;
 							}
 							else
 							{
-								OB = OperatorsDense[idx] * B;
+								OB = OperatorsDenseLocal[idx] * B;
 							}
 							double abs_trace = std::real(arma::accu(Bconj % OB));
 							double expected_value = abs_trace / Z;
@@ -1462,7 +1935,9 @@ namespace RunSection
 						// Calculate the expected values for each transition operator
 						for (int idx = 0; idx < projection_counter; idx++)
 						{
-							double result = std::abs(arma::cdot(prop_state, Operators[idx] * prop_state));
+							arma::cx_vec tmp = use_sparse_ops ? (OperatorsSparseLocal[idx] * prop_state)
+															  : (OperatorsDenseLocal[idx] * prop_state);
+							double result = std::abs(arma::cdot(prop_state, tmp));
 							ExptValuesOrientation(0, idx) += result;
 						}
 
@@ -1493,7 +1968,9 @@ namespace RunSection
 							// Calculate the expected values for each transition operator
 							for (int idx = 0; idx < projection_counter; idx++)
 							{
-								double result = std::abs(arma::cdot(prop_state, Operators[idx] * prop_state));
+								arma::cx_vec tmp = use_sparse_ops ? (OperatorsSparseLocal[idx] * prop_state)
+																  : (OperatorsDenseLocal[idx] * prop_state);
+								double result = std::abs(arma::cdot(prop_state, tmp));
 								ExptValuesOrientation(k, idx) += result;
 							}
 
@@ -1536,11 +2013,11 @@ namespace RunSection
 							arma::cx_mat OB;
 							if (use_sparse_ops)
 							{
-								OB = OperatorsSparse[idx] * B;
+								OB = OperatorsSparseLocal[idx] * B;
 							}
 							else
 							{
-								OB = OperatorsDense[idx] * B;
+								OB = OperatorsDenseLocal[idx] * B;
 							}
 							double abs_trace = std::real(arma::accu(Bconj % OB));
 							double expected_value = abs_trace / Z;
@@ -1575,8 +2052,15 @@ namespace RunSection
 						continue;
 					}
 					arma::cx_mat X = arma::reshape(sol, rho0mat.n_rows, rho0mat.n_cols);
+					arma::cx_mat X_t = X.t();
 
-					rho_integrated_partial[tid] += weight * X;
+					arma::vec &acc = ExptValuesTimeinfPartial[tid];
+					for (int idx = 0; idx < projection_counter; ++idx)
+					{
+						double val = use_sparse_ops ? (TraceSparseDense(OperatorsSparseLocal[idx], X) / Z)
+													: (TraceDenseTransposed(OperatorsDenseLocal[idx], X_t) / Z);
+						acc(idx) += weight * val;
+					}
 				}
 			}
 			}
@@ -1599,9 +2083,9 @@ namespace RunSection
 			}
 			if (method_timeinf)
 			{
-				for (auto &m : rho_integrated_partial)
+				for (auto &m : ExptValuesTimeinfPartial)
 				{
-					rho_integrated += m;
+					ExptValuesTimeinf += m;
 				}
 			}
 
@@ -1666,9 +2150,7 @@ namespace RunSection
 
 					for (int idx = 0; idx < projection_counter; idx++)
 					{
-						double val = use_sparse_ops ? (TraceSparseDense(OperatorsSparse[idx], rho_integrated) / Z)
-													: (std::real(arma::trace(OperatorsDense[idx] * rho_integrated)) / Z);
-						this->Data() << std::setprecision(12) << val << " ";
+						this->Data() << std::setprecision(12) << ExptValuesTimeinf(idx) << " ";
 					}
 					this->Data() << std::endl;
 				}
@@ -1833,6 +2315,30 @@ namespace RunSection
 
 		this->Properties()->Get("powderfullsphere", this->powderFullSphere);
 		this->Properties()->Get("fulltensorrotation", this->fullTensorRotation);
+
+		this->rwaEnabled = false;
+		this->Properties()->Get("rwa", this->rwaEnabled);
+
+		this->secularizeInteractions = false;
+		if (!this->Properties()->Get("secularize", this->secularizeInteractions))
+			this->Properties()->Get("secular", this->secularizeInteractions);
+
+		this->secularTolerance = 1e-6;
+		if (!this->Properties()->Get("seculartolerance", this->secularTolerance))
+			this->Properties()->Get("seculartol", this->secularTolerance);
+
+		this->mwFrequencyGHz = 0.0;
+		bool hasFrequency = this->Properties()->Get("mwfrequency", this->mwFrequencyGHz);
+		if (!hasFrequency)
+			hasFrequency = this->Properties()->Get("frequency", this->mwFrequencyGHz);
+		if (!hasFrequency)
+			this->Properties()->Get("rffrequency", this->mwFrequencyGHz);
+
+		this->fieldInteractionName.clear();
+		this->Properties()->Get("fieldinteraction", this->fieldInteractionName);
+
+		this->rwaSpinNames.clear();
+		this->Properties()->GetList("rwaspins", this->rwaSpinNames, ',');
 
 		return true;
 	}

@@ -11,6 +11,8 @@
 
 #include <armadillo>
 #include <tuple>
+#include <string>
+#include <vector>
 #include "BasicTask.h"
 #include "SpinAPIDefines.h"
 
@@ -22,9 +24,15 @@ namespace RunSection
 
 		double timestep;
 		double totaltime;
+		double mwFrequencyGHz;
+		double secularTolerance;
 		int powderGammaPoints;
 		bool powderFullSphere;
 		bool fullTensorRotation;
+		bool rwaEnabled;
+		bool secularizeInteractions;
+		std::string fieldInteractionName;
+		std::vector<std::string> rwaSpinNames;
 
 		SpinAPI::ReactionOperatorType reactionOperators;
 

@@ -9,11 +9,20 @@
 /////////////////////////////////////////////////////////////////////////
 #include <memory>
 #include <iostream>
+#include <mutex>
 #include "ObjectParser.h"
 #include "Spin.h"
 
 namespace SpinAPI
 {
+	namespace
+	{
+		std::mutex SxCollectionMutex;
+		std::mutex SyCollectionMutex;
+		std::mutex SzCollectionMutex;
+		std::mutex SpCollectionMutex;
+		std::mutex SmCollectionMutex;
+	}
 	// -----------------------------------------------------
 	// Spin Constructors and Destructor
 	// -----------------------------------------------------
@@ -434,52 +443,53 @@ namespace SpinAPI
 	// Get the Sx matrix, or create it from S+ and S-
 	std::shared_ptr<arma::sp_cx_mat> Spin::SxFromCollection(unsigned int _s)
 	{
-		// Check whether the matrix has been created
-		if (Spin::SxCollection.count(_s) < 1)
+		// Sx can be created from S+ and S-
+		auto sp = Spin::SpFromCollection(_s);
+		auto sm = Spin::SmFromCollection(_s);
+
+		// If S+ or S- could not be obtained, we cannot create Sx
+		if (sp == nullptr || sm == nullptr)
+			return nullptr;
+
+		std::lock_guard<std::mutex> lock(SxCollectionMutex);
+		auto it = Spin::SxCollection.find(_s);
+		if (it == Spin::SxCollection.end())
 		{
-			// Sx can be created from S+ and S-
-			auto sp = Spin::SpFromCollection(_s);
-			auto sm = Spin::SmFromCollection(_s);
-
-			// If S+ or S- could not be obtained, we cannot create Sx
-			if (sp == nullptr || sm == nullptr)
-				return nullptr;
-
-			// Create the matrix from S+ and S-
-			Spin::SxCollection[_s] = std::make_shared<arma::sp_cx_mat>(((*sp) + (*sm)) / 2.0);
+			it = Spin::SxCollection.emplace(_s, std::make_shared<arma::sp_cx_mat>(((*sp) + (*sm)) / 2.0)).first;
 		}
 
 		// Return the matrix
-		return Spin::SxCollection[_s];
+		return it->second;
 	}
 
 	// Get the Sy matrix, or create it from S+ and S-
 	std::shared_ptr<arma::sp_cx_mat> Spin::SyFromCollection(unsigned int _s)
 	{
-		// Check whether the matrix has been created
-		if (Spin::SyCollection.count(_s) < 1)
+		// Sy can be created from S+ and S-
+		auto sp = Spin::SpFromCollection(_s);
+		auto sm = Spin::SmFromCollection(_s);
+
+		// If S+ or S- could not be obtained, we cannot create Sy
+		if (sp == nullptr || sm == nullptr)
+			return nullptr;
+
+		std::lock_guard<std::mutex> lock(SyCollectionMutex);
+		auto it = Spin::SyCollection.find(_s);
+		if (it == Spin::SyCollection.end())
 		{
-			// Sy can be created from S+ and S-
-			auto sp = Spin::SpFromCollection(_s);
-			auto sm = Spin::SmFromCollection(_s);
-
-			// If S+ or S- could not be obtained, we cannot create Sy
-			if (sp == nullptr || sm == nullptr)
-				return nullptr;
-
-			// Create the matrix from S+ and S-
-			Spin::SyCollection[_s] = std::make_shared<arma::sp_cx_mat>(((*sp) - (*sm)) / arma::cx_double(0.0, 2.0));
+			it = Spin::SyCollection.emplace(_s, std::make_shared<arma::sp_cx_mat>(((*sp) - (*sm)) / arma::cx_double(0.0, 2.0))).first;
 		}
 
 		// Return the matrix
-		return Spin::SyCollection[_s];
+		return it->second;
 	}
 
 	// Get the Sz matrix
 	std::shared_ptr<arma::sp_cx_mat> Spin::SzFromCollection(unsigned int _s)
 	{
-		// Check whether the matrix has been created
-		if (Spin::SzCollection.count(_s) < 1)
+		std::lock_guard<std::mutex> lock(SzCollectionMutex);
+		auto it = Spin::SzCollection.find(_s);
+		if (it == Spin::SzCollection.end())
 		{
 			// Create and fill a vector containing the diagonal values
 			arma::cx_vec diagvec(_s + 1);
@@ -491,18 +501,19 @@ namespace SpinAPI
 			tempmat->diag() = diagvec;
 
 			// Put the matrix into the collection
-			Spin::SzCollection[_s] = tempmat;
+			it = Spin::SzCollection.emplace(_s, tempmat).first;
 		}
 
 		// Return the matrix
-		return Spin::SzCollection[_s];
+		return it->second;
 	}
 
 	// Get the S+ matrix
 	std::shared_ptr<arma::sp_cx_mat> Spin::SpFromCollection(unsigned int _s)
 	{
-		// Check whether the matrix has been created
-		if (Spin::SpCollection.count(_s) < 1)
+		std::lock_guard<std::mutex> lock(SpCollectionMutex);
+		auto it = Spin::SpCollection.find(_s);
+		if (it == Spin::SpCollection.end())
 		{
 			// Create a matrix and fill it will the right values
 			std::shared_ptr<arma::sp_cx_mat> tempmat = std::make_shared<arma::sp_cx_mat>(_s + 1, _s + 1);
@@ -514,18 +525,19 @@ namespace SpinAPI
 			}
 
 			// Put the matrix into the collection
-			Spin::SpCollection[_s] = tempmat;
+			it = Spin::SpCollection.emplace(_s, tempmat).first;
 		}
 
 		// Return the matrix
-		return Spin::SpCollection[_s];
+		return it->second;
 	}
 
 	// Get the S- matrix
 	std::shared_ptr<arma::sp_cx_mat> Spin::SmFromCollection(unsigned int _s)
 	{
-		// Check whether the matrix has been created
-		if (Spin::SmCollection.count(_s) < 1)
+		std::lock_guard<std::mutex> lock(SmCollectionMutex);
+		auto it = Spin::SmCollection.find(_s);
+		if (it == Spin::SmCollection.end())
 		{
 			// Create a matrix and fill it will the right values
 			std::shared_ptr<arma::sp_cx_mat> tempmat = std::make_shared<arma::sp_cx_mat>(_s + 1, _s + 1);
@@ -537,11 +549,11 @@ namespace SpinAPI
 			}
 
 			// Put the matrix into the collection
-			Spin::SmCollection[_s] = tempmat;
+			it = Spin::SmCollection.emplace(_s, tempmat).first;
 		}
 
 		// Return the matrix
-		return Spin::SmCollection[_s];
+		return it->second;
 	}
 	// -----------------------------------------------------
 	// Non-member non-friend functions
