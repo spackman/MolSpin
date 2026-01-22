@@ -891,8 +891,8 @@ namespace SpinAPI
 					}
 				}
 			}
-      else if (_interaction->Type() == InteractionType::Zfs)
-		  {
+      		else if (_interaction->Type() == InteractionType::Zfs)
+		  	{
 			  // Obtain lists of interacting spins, coupling tensor, and define matrices to hold the magnetic moment operators
 			  auto spinlist = _interaction->Group1();
 			  // Build Sx, Sy, Sz for *each* electron in Group1
@@ -938,54 +938,54 @@ namespace SpinAPI
 			  		}
 			  	}
 			  }
-		  }
-		  else if (_interaction->Type() == InteractionType::SemiClassicalField)
-		  {
-		  	// Obtain lists of interacting spins, coupling tensor, and define matrices to hold the magnetic moment operators
-		  	auto spinlist = _interaction->Group1();
-  
-		  	//  Grab amplitude and orientation parameters
-		  	const SCHyperfineField field = _interaction->Hfiamplitude()[0]; 
-		  	const auto[B,nu,sqn] = field;
-		  	const auto B0 = B[0][0];
-  
-		  	const int n = _interaction->Orientations();		// averaging grid
-  
-		  	// Build Sx, Sy, Sz for *each* electron in Group1
-		  	arma::sp_cx_mat Sx;
-		  	arma::sp_cx_mat Sy;
-		  	arma::sp_cx_mat Sz;
-  
-		  	// Fill the matrix with the sum of all the interactions (i.e. between spin magnetic moment and fields)
-		  	for (auto i = spinlist.cbegin(); i != spinlist.cend(); i++)
+		  	}
+		  	else if (_interaction->Type() == InteractionType::SemiClassicalField)
 		  	{
-		  		if (_interaction->IgnoreTensors())
+		  		// Obtain lists of interacting spins, coupling tensor, and define matrices to hold the magnetic moment operators
+		  		auto spinlist = _interaction->Group1();
+			
+		  		//  Grab amplitude and orientation parameters
+		  		const SCHyperfineField field = _interaction->Hfiamplitude()[0]; 
+		  		const auto[B,nu,sqn] = field;
+		  		const auto B0 = B[0][0];
+			
+		  		const int n = _interaction->Orientations();		// averaging grid
+			
+		  		// Build Sx, Sy, Sz for *each* electron in Group1
+		  		arma::sp_cx_mat Sx;
+		  		arma::sp_cx_mat Sy;
+		  		arma::sp_cx_mat Sz;
+			
+		  		// Fill the matrix with the sum of all the interactions (i.e. between spin magnetic moment and fields)
+		  		for (auto i = spinlist.cbegin(); i != spinlist.cend(); i++)
 		  		{
-		  			this->CreateOperator((*i)->Sx(), (*i), Sx);
-		  			this->CreateOperator((*i)->Sy(), (*i), Sy);
-		  			this->CreateOperator((*i)->Sz(), (*i), Sz);
-		  		}
-		  		else
-		  		{
-		  			this->CreateOperator((*i)->Tx(), (*i), Sx);
-		  			this->CreateOperator((*i)->Ty(), (*i), Sy);
-		  			this->CreateOperator((*i)->Tz(), (*i), Sz);
-		  		}
-  
-		  		// Semi-classical average  (weight = ½ sinθ Δθ)
-		  		for (int k = 0; k < n; ++k)
-		  		{
-		  			double theta = M_PI * (k + 0.5) / n;
-		  			double weight = 0.5 * std::sin(theta) * (M_PI / n);
-  
-		  			// Local field components in the *molecule* frame
-		  			double Bx = B0 * std::sin(theta);
-		  			double Bz = B0 * std::cos(theta);
-  
-		  			tmp += weight * (Bx * Sx + Bz * Sz); // Sy-component = 0 by symmetry
+		  			if (_interaction->IgnoreTensors())
+		  			{
+		  				this->CreateOperator((*i)->Sx(), (*i), Sx);
+		  				this->CreateOperator((*i)->Sy(), (*i), Sy);
+		  				this->CreateOperator((*i)->Sz(), (*i), Sz);
+		  			}
+		  			else
+		  			{
+		  				this->CreateOperator((*i)->Tx(), (*i), Sx);
+		  				this->CreateOperator((*i)->Ty(), (*i), Sy);
+		  				this->CreateOperator((*i)->Tz(), (*i), Sz);
+		  			}
+				
+		  			// Semi-classical average  (weight = ½ sinθ Δθ)
+		  			for (int k = 0; k < n; ++k)
+		  			{
+		  				double theta = M_PI * (k + 0.5) / n;
+		  				double weight = 0.5 * std::sin(theta) * (M_PI / n);
+					
+		  				// Local field components in the *molecule* frame
+		  				double Bx = B0 * std::sin(theta);
+		  				double Bz = B0 * std::cos(theta);
+					
+		  				tmp += weight * (Bx * Sx + Bz * Sz); // Sy-component = 0 by symmetry
+		  			}
 		  		}
 		  	}
-		  }
 			else
 			{
 				// The interaction type was not recognized
@@ -1206,59 +1206,71 @@ namespace SpinAPI
 		}
 		else if (_interaction->Type() == InteractionType::Zfs)
 		{
-			// Obtain lists of interacting spins, coupling tensor, and define matrices to hold the magnetic moment operators
-			auto spinlist = _interaction->Group1();
-			// Build Sx, Sy, Sz for *each* electron in Group1
-			arma::sp_cx_mat Sx;
-			arma::sp_cx_mat Sy;
-			arma::sp_cx_mat Sz;
-
-			// Fill the matrix with the sum of all the interactions (i.e. between spin magnetic moment and fields)
-			for (auto i = spinlist.cbegin(); i != spinlist.cend(); i++)
-			{
-				if (_interaction->IgnoreTensors())
-				{
-					this->CreateOperator((*i)->Sx(), (*i), Sx);
-					this->CreateOperator((*i)->Sy(), (*i), Sy);
-					this->CreateOperator((*i)->Sz(), (*i), Sz);
-				}
-				else
-				{
-					this->CreateOperator((*i)->Tx(), (*i), Sx);
-					this->CreateOperator((*i)->Ty(), (*i), Sy);
-					this->CreateOperator((*i)->Tz(), (*i), Sz);
-				}
-
-				// Get D and E value
-				double D = _interaction->Dvalue();
-				double E = _interaction->Evalue();
-
-				if (D == 0.0 && E == 0.0)
-				{
-					std::cout << "D or E value for zero-field splitting was not found." << std::endl;
-				}
-				else
-				{
-					// Calculate Zfs interaction
-					tmp = D * (Sz * Sz - ((1.00 / 3.00) * (*i)->S() * ((*i)->S() + 1))) + E * (Sx * Sx - Sy * Sy);
-				}
-			}
+		  // Obtain lists of interacting spins, coupling tensor, and define matrices to hol
+		  auto spinlist = _interaction->Group1();
+		  // Build Sx, Sy, Sz for *each* electron in Group1
+		  arma::sp_cx_mat Sx;
+		  arma::sp_cx_mat Sy;
+		  arma::sp_cx_mat Sz;
+		  // Fill the matrix with the sum of all the interactions (i.e. between spin magnet
+		  for (auto i = spinlist.cbegin(); i != spinlist.cend(); i++)
+		  {
+		  	if (_interaction->IgnoreTensors())
+		  	{
+		  		this->CreateOperator((*i)->Sx(), (*i), Sx);
+		  		this->CreateOperator((*i)->Sy(), (*i), Sy);
+		  		this->CreateOperator((*i)->Sz(), (*i), Sz);
+		  	}
+		  	else
+		  	{
+		  		this->CreateOperator((*i)->Tx(), (*i), Sx);
+		  		this->CreateOperator((*i)->Ty(), (*i), Sy);
+		  		this->CreateOperator((*i)->Tz(), (*i), Sz);
+		  	}
+		  	// Get D and E value
+		  	double D = _interaction->Dvalue();
+		  	double E = _interaction->Evalue();
+		  	{
+		  		// Calculate Zfs interaction
+		  		//tmp = D * (Sz * Sz - ((1.00 / 3.00) * (*i)->S() * ((*i)->S() + 1))) + E *
+		  		if(std::abs(D) >= 1e-100)
+		  		{
+		  			int sn = (*i)->S() * 1.0/2.0;
+		  			double val = (1.00 / 3.00) * sn * (sn + 1);
+		  			arma::cx_mat energy_shift = arma::zeros<arma::cx_mat>(this->HilbertSpac
+		  			if(_interaction->ES())
+		  				energy_shift = val * arma::eye<arma::cx_mat>(this->HilbertSpaceDime
+		  			tmp += D * ((Sz * Sz) - energy_shift);
+		  		}
+		  		if(std::abs(E) >= 1e-100)
+		  		{
+		  			tmp += E * (Sx * Sx - Sy * Sy);
+		  		}
+		  	}
+		  }
 		}
 		else if (_interaction->Type() == InteractionType::SemiClassicalField)
 		{
-			// Obtain lists of interacting spins, coupling tensor, and define matrices to hold the magnetic moment operators
+			// Obtain lists of interacting spins, coupling tensor, and define matrices to h
 			auto spinlist = _interaction->Group1();
-
+					
+		
 			//  Grab amplitude and orientation parameters
-			const double B0 = _interaction->Hfiamplitude(); // Tesla
+			const SCHyperfineField field = _interaction->Hfiamplitude()[0]; 
+			const auto[B,nu,sqn] = field;
+			const auto B0 = B[0][0];
+					
+		
 			const int n = _interaction->Orientations();		// averaging grid
-
+					
+		
 			// Build Sx, Sy, Sz for *each* electron in Group1
 			arma::sp_cx_mat Sx;
 			arma::sp_cx_mat Sy;
 			arma::sp_cx_mat Sz;
-
-			// Fill the matrix with the sum of all the interactions (i.e. between spin magnetic moment and fields)
+					
+		
+			// Fill the matrix with the sum of all the interactions (i.e. between spin magn
 			for (auto i = spinlist.cbegin(); i != spinlist.cend(); i++)
 			{
 				if (_interaction->IgnoreTensors())
@@ -1273,17 +1285,17 @@ namespace SpinAPI
 					this->CreateOperator((*i)->Ty(), (*i), Sy);
 					this->CreateOperator((*i)->Tz(), (*i), Sz);
 				}
-
+			
 				// Semi-classical average  (weight = ½ sinθ Δθ)
 				for (int k = 0; k < n; ++k)
 				{
 					double theta = M_PI * (k + 0.5) / n;
 					double weight = 0.5 * std::sin(theta) * (M_PI / n);
-
+				
 					// Local field components in the *molecule* frame
 					double Bx = B0 * std::sin(theta);
 					double Bz = B0 * std::cos(theta);
-
+				
 					tmp += weight * (Bx * Sx + Bz * Sz); // Sy-component = 0 by symmetry
 				}
 			}

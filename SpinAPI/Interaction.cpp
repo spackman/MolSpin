@@ -77,7 +77,7 @@ namespace SpinAPI
 					this->type = InteractionType::SingleSpin;
 				}
 				std::vector<double> _framelist;
-				if (this->Properties()->GetList ("orientation", _framelist))
+				if (this->Properties()->GetList ("orientation", _framelist)) //change to euler angles 
 				{
 					this->framelist = _framelist;
 				}
@@ -88,7 +88,7 @@ namespace SpinAPI
 				this->type = InteractionType::DoubleSpin;
 
 				std::vector<double> _framelist;
-				if (this->Properties()->GetList ("orientation", _framelist))
+				if (this->Properties()->GetList ("orientation", _framelist)) //""
 				{
 					this->framelist = _framelist;
 				}
