@@ -9,6 +9,7 @@
 # Ignore output data and logfiles
 *.dat
 *.log
+*.txt
 
 # Ignore user-specific settings
 CMakeLists.txt.user
