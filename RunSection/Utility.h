@@ -18,13 +18,13 @@
 
 namespace RunSection
 {
-#pragma region FibSphere
+// region FibSphere
     typedef std::pair<float, float> FibSpherePoint;
     FibSpherePoint* CalculateFibPoints(int n);
     bool RetrievePoint (std::array<double, 3> &arr, FibSpherePoint* ptr, int num);
-#pragma endregion
+// endregion FibSphere
 
-#pragma region MonteCarloSphere
+// region MonteCarloSphere
     
     struct MCSpherePoint
     {
@@ -48,9 +48,9 @@ namespace RunSection
     /// @param rmax_n maxiumum radius
     MCSpherePoint* CalculateMCSpherePoints(int n, double rmax);
     bool RetrieveMCPoint (std::array<double, 3> &arr, MCSpherePoint* ptr, int num);
-#pragma endregion
+// endregion MonteCarloSphere
 
-#pragma region SemiClassical
+// region SemiClassical
     struct SCData
     {
         arma::sp_cx_mat H; //Hamiltonian
@@ -71,8 +71,8 @@ namespace RunSection
     std::vector<SampleCombination> GenerateCombinationsNI(const std::vector<std::vector<int>>&, int startpoint = 0, int endpont = 0); //non independent spin systems 
     //std::vector<std::vector<int>> GenerateCombinationsI(const std::vector<std::vector<int>>&); //independent spin systems
 
-#pragma endregion
-#pragma region TimeEvo
+// endregion SemiClassical
+// region TimeEvo
     typedef arma::cx_vec (*RungeKuttaFuncArma)(double t, arma::sp_cx_mat &, arma::cx_vec &, arma::cx_vec);
     
     /// Runge-Kutta-Fehlberg method (4th and 5th order) with adaptive time step control
@@ -88,10 +88,10 @@ namespace RunSection
     ///     @return New time step (double)
     double RungeKutta45Armadillo(arma::sp_cx_mat &, arma::cx_vec &, arma::cx_vec &, double, RungeKuttaFuncArma, std::pair<double, double>, double MinTimeStep = 1e-6, double MaxTimeStep = 1e6, double time = 0);
 
-#pragma endregion 
+// endregion TimeEvo 
     unsigned int GetNumThreads();
 
-#pragma region BlockMatrixInversionSolvers
+// region BlockMatrixInversionSolvers
     //With these solvers there is the potential for a large amount of matrix fill-in during the solution process.
     //Block thomas has less fill in for larger systems with a block tridiagonal structure, than a general block solver.
     
@@ -125,10 +125,9 @@ namespace RunSection
     arma::cx_mat AugmentedMatrix(arma::cx_mat Mat, arma::cx_vec b);
     std::pair<arma::cx_mat, arma::cx_vec> UndoAugmentedMatrix(arma::cx_mat AugMat);
 
+// endregion BlockMatrixInversionSolvers
 
-#pragma endregion
-
-#pragma region SparseMatrixSolvers
+// region SparseMatrixSolvers
     //DONT USE THESE FUNCTIONS THEY ARE SLOW 
     //SparseMatrixSolvers
     //Preconditioned BiCGSTAB solver
@@ -150,7 +149,7 @@ namespace RunSection
     std::vector<int> LUDecomposition(arma::sp_cx_mat &K);
     arma::cx_vec LUSolve(arma::sp_cx_mat &K, std::vector<int> &P, arma::cx_vec &b); //LU decomposition and solve
 
-#pragma endregion
+// endregion SparseMatrixSolvers
 }
 
 #endif
