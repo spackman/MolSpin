@@ -45,6 +45,9 @@ namespace RunSection
 			this->WriteHeader(this->Data());
 		}
 
+		// Obtain results
+		this->Data() << this->RunSettings()->CurrentStep() << " ";
+		this->WriteStandardOutput(this->Data());
 		// Loop through all SpinSystems
 		auto systems = this->SpinSystems();
 		for (auto i = systems.cbegin(); i != systems.cend(); i++) // iteration through all spin systems, in this case (or usually), this is one
@@ -93,7 +96,7 @@ namespace RunSection
 
 			std::string InitialState;
 			arma::cx_mat InitialStateVector;
-			if(this->Properties()->Get("initialstate", InitialState))
+			if (this->Properties()->Get("initialstate", InitialState))
 			{
 				// Set up states for time-propagation
 				arma::cx_mat TaskInitialStateVector(4, 1);
@@ -810,10 +813,6 @@ namespace RunSection
 				}
 			}
 
-			// Obtain results
-			this->Data() << this->RunSettings()->CurrentStep() << " ";
-			this->WriteStandardOutput(this->Data());
-
 			arma::mat ans = arma::trapz(time, ExptValues);
 
 			for (int it = 0; it < num_transitions; it++)
@@ -831,7 +830,7 @@ namespace RunSection
 				this->Data() << std::setprecision(6) << ans(0, it) << " ";
 			}
 
-			this->Data() << std::endl;
+			// this->Data() << std::endl;
 
 			// This commented section bellow was only for testing purposes
 
@@ -844,6 +843,7 @@ namespace RunSection
 			// std::cout << std::setprecision(6) << arma::accu(ans) << std::endl;
 			// std::cout << std::endl;
 		}
+		this->Data() << std::endl;
 		return true;
 	}
 	bool TaskDynamicHSDirectYields::is_identity_matrix(arma::sp_cx_mat &matrix)
@@ -912,7 +912,7 @@ namespace RunSection
 	bool TaskDynamicHSDirectYields::Validate()
 	{
 		this->Properties()->Get("transitionyields", this->productYieldsOnly);
-		
+
 		// Get the reaction operator type
 		std::string str;
 		if (this->Properties()->Get("reactionoperators", str))

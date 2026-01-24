@@ -16,7 +16,6 @@
 #include "Utility.h"
 #include "Operator.h"
 
-
 namespace RunSection
 {
 	// -----------------------------------------------------
@@ -42,7 +41,7 @@ namespace RunSection
 		{
 			this->WriteHeader(this->Data());
 		}
-		
+
 		// Loop through all SpinSystems to obtain SpinSpace objects
 		auto systems = this->SpinSystems();
 		std::vector<std::pair<std::shared_ptr<SpinAPI::SpinSystem>, std::shared_ptr<SpinAPI::SpinSpace>>> spaces;
@@ -68,8 +67,8 @@ namespace RunSection
 		// Loop through the systems again to fill this matrix and vector
 		for (auto i = spaces.cbegin(); i != spaces.cend(); i++)
 		{
-			//If SpinSpace is made up of multiple SubSystems, this get's handled seperately rejoining when evaluating the creation operators for linking SpinSpaces.
-			// Make sure we have an initial state
+			// If SpinSpace is made up of multiple SubSystems, this get's handled seperately rejoining when evaluating the creation operators for linking SpinSpaces.
+			//  Make sure we have an initial state
 			auto initial_states = i->first->InitialState();
 			arma::cx_mat rho0HS;
 			if (initial_states.size() < 1)
@@ -203,8 +202,8 @@ namespace RunSection
 		double CurrentTime = 0.0;
 		bool NoFail = false;
 
-		//Very much a quick solution atm
-		if(this->prop == Propagator::exp)
+		// Very much a quick solution atm
+		if (this->prop == Propagator::exp)
 		{
 			this->Log() << "Using exponential propogator" << std::endl;
 			this->Log() << "Calculating the propagator..." << std::endl;
@@ -237,15 +236,15 @@ namespace RunSection
 		this->Log() << "Ready to perform calculation." << std::endl;
 		double InitialTimeStep = this->timestep;
 		double MinTimeStep, MaxTimeStep = 0.0;
-		if(!this->Properties()->Get("minimumtimestep", MinTimeStep) and !this->Properties()->Get("minimum timestep", MinTimeStep))
+		if (!this->Properties()->Get("minimumtimestep", MinTimeStep) and !this->Properties()->Get("minimum timestep", MinTimeStep))
 		{
 			MinTimeStep = InitialTimeStep * 1e-3;
 		}
-		if(!this->Properties()->Get("maximumtimestep", MaxTimeStep) and !this->Properties()->Get("maximum timestep", MaxTimeStep))
+		if (!this->Properties()->Get("maximumtimestep", MaxTimeStep) and !this->Properties()->Get("maximum timestep", MaxTimeStep))
 		{
 			MaxTimeStep = InitialTimeStep * 1e4;
 		}
-		
+
 		this->Log() << "Starting time evolution with timestep: " << this->timestep << ", total time: " << this->totaltime << ", minimum timestep: " << MinTimeStep << ", maximum timestep: " << MaxTimeStep << std::endl;
 		while (CurrentTime <= this->totaltime)
 		{
@@ -253,9 +252,9 @@ namespace RunSection
 			CurrentTime += this->timestep;
 			this->Data() << CurrentTime << " ";
 			this->WriteStandardOutput(this->Data());
-			
+
 			// Propagate
-			this->timestep = RungeKutta45Armadillo(L, rho0, rho0, this->timestep, ComputeRhoDot, {1e-7,1e-6}, MinTimeStep, MaxTimeStep);
+			this->timestep = RungeKutta45Armadillo(L, rho0, rho0, this->timestep, ComputeRhoDot, {1e-7, 1e-6}, MinTimeStep, MaxTimeStep);
 
 			NoFail = SeperateSpinSystems(rho0, spaces, this->ProductYieldsOnly);
 			if (!NoFail)
@@ -347,18 +346,18 @@ namespace RunSection
 			nextDimension += i->second->SpaceDimensions();
 		}
 		return true;
-    }
+	}
 
-    //Right hand side of the master equation for use with Runge Kutta
-    arma::cx_vec TaskMultiStaticSSTimeEvo::ComputeRhoDot(double t, arma::sp_cx_mat &L, arma::cx_vec &K, arma::cx_vec RhoNaught)
-    {
-        arma::cx_vec ReturnVec(L.n_rows);
+	// Right hand side of the master equation for use with Runge Kutta
+	arma::cx_vec TaskMultiStaticSSTimeEvo::ComputeRhoDot(double t, arma::sp_cx_mat &L, arma::cx_vec &K, arma::cx_vec RhoNaught)
+	{
+		arma::cx_vec ReturnVec(L.n_rows);
 		RhoNaught = RhoNaught + K;
 		ReturnVec = L * RhoNaught;
 		return ReturnVec;
-    }
+	}
 
-    // Writes the header of the data file (but can also be passed to other streams)
+	// Writes the header of the data file (but can also be passed to other streams)
 	void TaskMultiStaticSSTimeEvo::WriteHeader(std::ostream &_stream)
 	{
 		_stream << "Step ";
@@ -423,7 +422,7 @@ namespace RunSection
 				return false;
 			}
 		}
-		//Get Propogator
+		// Get Propogator
 		std::string propagator_str;
 		if (!this->Properties()->Get("Propagator", propagator_str) && !this->Properties()->Get("propagator", propagator_str))
 		{
@@ -433,8 +432,8 @@ namespace RunSection
 		{
 			this->SelectPropagator(propagator_str);
 		}
-		
-		if(this->prop == Propagator::Default)
+
+		if (this->prop == Propagator::Default)
 			this->prop = Propagator::RK45;
 
 		// Get the reacton operator type

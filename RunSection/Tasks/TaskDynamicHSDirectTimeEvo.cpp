@@ -93,7 +93,7 @@ namespace RunSection
 
 			std::string InitialState;
 			arma::cx_mat InitialStateVector;
-			if(this->Properties()->Get("initialstate", InitialState))
+			if (this->Properties()->Get("initialstate", InitialState))
 			{
 				// Set up states for time-propagation
 				arma::cx_mat TaskInitialStateVector(4, 1);
@@ -194,7 +194,7 @@ namespace RunSection
 				temp(it) = 1;
 				B.col(it) = arma::kron(InitialStateVector, temp);
 			}
-			
+
 			// Check whether Hamiltonian terms and/or transitions are time-dependent
 			bool time_dependent_hamiltonian;
 			this->timedependentInteractions = space.HasTimedependentInteractions();
@@ -541,7 +541,7 @@ namespace RunSection
 						}
 						B.col(itr) = prop_state;
 					}
-					
+
 					ExptValues /= Z;
 
 					for (int k = 0; k < num_steps; k++)
@@ -550,7 +550,7 @@ namespace RunSection
 						this->Data() << this->RunSettings()->CurrentStep() << " ";
 						this->Data() << time(k) << " ";
 						this->WriteStandardOutput(this->Data());
-						
+
 						for (int idx = 0; idx < num_transitions; idx++)
 						{
 							this->Data() << " " << ExptValues(k, idx);
@@ -575,7 +575,7 @@ namespace RunSection
 							// Set the current time
 							double current_time = k * dt;
 							time(k) = current_time;
-							
+
 							// Obtain results
 							this->Data() << this->RunSettings()->CurrentStep() << " ";
 							this->Data() << current_time << " ";
@@ -615,12 +615,12 @@ namespace RunSection
 							// Set the current time
 							double current_time = k * dt;
 							time(k) = current_time;
-							
+
 							// Obtain results
 							this->Data() << this->RunSettings()->CurrentStep() << " ";
 							this->Data() << current_time << " ";
 							this->WriteStandardOutput(this->Data());
-							
+
 							// Set the currentime for the Dynamic Hamiltonian
 							space.SetTime(current_time);
 
@@ -748,7 +748,7 @@ namespace RunSection
 							this->Data() << this->RunSettings()->CurrentStep() << " ";
 							this->Data() << time(k) << " ";
 							this->WriteStandardOutput(this->Data());
-							
+
 							for (int idx = 0; idx < num_transitions; idx++)
 							{
 								this->Data() << " " << ExptValues(k, idx);
@@ -777,12 +777,12 @@ namespace RunSection
 						// Set the current time
 						double current_time = k * dt;
 						time(k) = current_time;
-						
+
 						// Obtain results
 						this->Data() << this->RunSettings()->CurrentStep() << " ";
 						this->Data() << current_time << " ";
 						this->WriteStandardOutput(this->Data());
-						
+
 						// Set the currentime for the Dynamic Hamiltonian
 						space.SetTime(current_time);
 
@@ -881,11 +881,13 @@ namespace RunSection
 						{
 							this->Data() << " " << ExptValues(k, idx);
 						}
+						
 						this->Data() << std::endl;
 					}
 				}
 			}
 		}
+
 		return true;
 	}
 

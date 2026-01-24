@@ -93,7 +93,7 @@ namespace RunSection
 
 			std::string InitialState;
 			arma::cx_mat InitialStateVector;
-			if(this->Properties()->Get("initialstate", InitialState))
+			if (this->Properties()->Get("initialstate", InitialState))
 			{
 				// Set up states for time-propagation
 				arma::cx_mat TaskInitialStateVector(4, 1);
@@ -611,7 +611,7 @@ namespace RunSection
 						}
 						B.col(itr) = prop_state;
 					}
-					
+
 					ExptValues /= mc_samples;
 
 					for (int k = 0; k < num_steps; k++)
@@ -812,14 +812,14 @@ namespace RunSection
 						}
 
 						ExptValues /= mc_samples;
-						
+
 						for (int k = 0; k < num_steps; k++)
 						{
 							// obtain results
 							this->Data() << this->RunSettings()->CurrentStep() << " ";
 							this->Data() << time(k) << " ";
 							this->WriteStandardOutput(this->Data());
-		
+
 							for (int idx = 0; idx < num_transitions; idx++)
 							{
 								this->Data() << " " << ExptValues(k, idx);
@@ -957,6 +957,7 @@ namespace RunSection
 				}
 			}
 		}
+
 		return true;
 	}
 

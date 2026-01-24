@@ -32,7 +32,8 @@ namespace RunSection
 	{
 		std::string ToLower(std::string value)
 		{
-			std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+			std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c)
+						   { return static_cast<char>(std::tolower(c)); });
 			return value;
 		}
 
@@ -199,12 +200,12 @@ namespace RunSection
 					this->Data() << this->RunSettings()->Time() << " ";
 					this->WriteStandardOutput(this->Data());
 					this->Data() << cache.field_mT[idx] << " "
-								<< cache.total_x[idx] << " " << cache.total_y[idx] << " " << cache.total_perp[idx] << " "
-								<< cache.cross_x[idx] << " " << cache.cross_y[idx] << " ";
+								 << cache.total_x[idx] << " " << cache.total_y[idx] << " " << cache.total_perp[idx] << " "
+								 << cache.cross_x[idx] << " " << cache.cross_y[idx] << " ";
 					for (size_t i = 0; i < cache.spin_names.size(); ++i)
 					{
 						this->Data() << cache.spin_x[i][idx] << " " << cache.spin_y[i][idx] << " " << cache.spin_perp[i][idx] << " "
-									<< cache.spin_p[i][idx] << " " << cache.spin_m[i][idx] << " ";
+									 << cache.spin_p[i][idx] << " " << cache.spin_m[i][idx] << " ";
 					}
 					this->Data() << std::endl;
 					continue;
@@ -347,7 +348,7 @@ namespace RunSection
 			}
 			const int gamma_points = (numPoints > 1) ? std::max(1, this->powderGammaPoints) : 1;
 			const double gamma_weight = useSopheGrid ? (2.0 * arma::datum::pi / static_cast<double>(gamma_points))
-														: (1.0 / static_cast<double>(gamma_points));
+													 : (1.0 / static_cast<double>(gamma_points));
 			if (this->powderGammaPoints > 1)
 				this->Log() << "Sampling gamma with " << this->powderGammaPoints << " points per orientation." << std::endl;
 
@@ -537,7 +538,7 @@ namespace RunSection
 							if (dBdE > 1e5)
 								continue;
 
-							const double deltaB = deltaOmega * dBdE;  // T
+							const double deltaB = deltaOmega * dBdE; // T
 							const double deltaB_mT = 1.0e3 * deltaB;
 
 							const double L = this->LineshapeValue(deltaB_mT, lwB_mT);
@@ -650,12 +651,12 @@ namespace RunSection
 			this->Data() << this->RunSettings()->Time() << " ";
 			this->WriteStandardOutput(this->Data());
 			this->Data() << field_mT << " "
-						<< total_x << " " << total_y << " " << total_perp << " "
-						<< cross_x << " " << cross_y << " ";
+						 << total_x << " " << total_y << " " << total_perp << " "
+						 << cross_x << " " << cross_y << " ";
 			for (size_t i = 0; i < detectSpinNames.size(); ++i)
 			{
 				this->Data() << spin_x[i] << " " << spin_y[i] << " " << spin_perp[i] << " "
-							<< spin_p[i] << " " << spin_m[i] << " ";
+							 << spin_p[i] << " " << spin_m[i] << " ";
 			}
 			this->Data() << std::endl;
 		}
@@ -1047,14 +1048,15 @@ namespace RunSection
 	}
 
 	bool TaskStaticHSTrEPRSpectra::ResolveDetectionSpins(const SpinAPI::system_ptr &_system, const SpinAPI::interaction_ptr &_fieldInteraction,
-														std::vector<SpinAPI::spin_ptr> &_spins, std::vector<std::string> &_spinNames) const
+														 std::vector<SpinAPI::spin_ptr> &_spins, std::vector<std::string> &_spinNames) const
 	{
 		_spins.clear();
 		_spinNames.clear();
 		if (_system == nullptr)
 			return false;
 
-		auto add_spin = [&](const SpinAPI::spin_ptr &spin) -> bool {
+		auto add_spin = [&](const SpinAPI::spin_ptr &spin) -> bool
+		{
 			if (spin == nullptr)
 				return false;
 			for (const auto &existing : _spins)
@@ -1355,7 +1357,7 @@ namespace RunSection
 		}
 		const int gamma_points = (numPoints > 1) ? std::max(1, this->powderGammaPoints) : 1;
 		const double gamma_weight = useSopheGrid ? (2.0 * arma::datum::pi / static_cast<double>(gamma_points))
-													: (1.0 / static_cast<double>(gamma_points));
+												 : (1.0 / static_cast<double>(gamma_points));
 
 		const double lwB_mT = std::abs(this->linewidth_mT);
 		const double lwB_T = lwB_mT * 1.0e-3;

@@ -1215,8 +1215,8 @@ namespace RunSection
 		{
 			double index = static_cast<double>(i) + 0.5;
 
-			theta[i] = std::acos(1.0 - index / _Npoints); // hemisphere
-			phi[i] = golden * index; // hemisphere
+			theta[i] = std::acos(1.0 - index / _Npoints);		  // hemisphere
+			phi[i] = golden * index;							  // hemisphere
 			weight[i] = std::sin(theta[i]) * 2 * M_PI / _Npoints; // 2 * pi for hemisphere
 			_uniformGrid[i] = {theta[i], phi[i], weight[i]};
 		}
@@ -1254,8 +1254,5 @@ namespace RunSection
 		return true;
 	}
 
-	
-
-	
 	// -----------------------------------------------------
 }

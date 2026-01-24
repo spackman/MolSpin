@@ -21,7 +21,7 @@ namespace RunSection
 	// TaskMultiStaticSSTimeEvoSpectra Constructors and Destructor
 	// -----------------------------------------------------
 	TaskMultiStaticSSTimeEvoSpectra::TaskMultiStaticSSTimeEvoSpectra(const MSDParser::ObjectParser &_parser, const RunSection &_runsection) : BasicTask(_parser, _runsection), timestep(1.0), totaltime(1.0e+4), productYieldsOnly(false),
-																																reactionOperators(SpinAPI::ReactionOperatorType::Haberkorn)
+																																			  reactionOperators(SpinAPI::ReactionOperatorType::Haberkorn)
 	{
 	}
 
@@ -79,7 +79,7 @@ namespace RunSection
 			{
 				std::vector<double> weights;
 				weights = i->first->Weights();
-				
+
 				// Normalize the weights
 				double sum_weights = std::accumulate(weights.begin(), weights.end(), 0.0);
 
@@ -168,7 +168,6 @@ namespace RunSection
 
 			L.submat(nextDimension, nextDimension, nextDimension + i->second->SpaceDimensions() - 1, nextDimension + i->second->SpaceDimensions() - 1) -= K;
 
-			
 			// Get the relaxation terms, assuming that they can just be added to the Liouvillian superoperator
 			arma::sp_cx_mat R;
 			for (auto j = i->first->operators_cbegin(); j != i->first->operators_cend(); j++)
@@ -340,16 +339,16 @@ namespace RunSection
 						if (this->productYieldsOnly && Dnp == false)
 						{
 							// Loop through all defind transitions
-							
+
 							for (auto j = transitions.cbegin(); j != transitions.cend(); j++)
 							{
 								// Make sure that there is a state object
 								if ((*j)->SourceState() == nullptr)
 
-								if (!_space.GetState((*j)->SourceState(), P))
-								{
-									this->Log() << "Failed to obtain projection matrix onto state \"" << (*j)->Name() << "\" of SpinSystem \"" << _system.Name() << "\"." << std::endl;
-								}
+									if (!_space.GetState((*j)->SourceState(), P))
+									{
+										this->Log() << "Failed to obtain projection matrix onto state \"" << (*j)->Name() << "\" of SpinSystem \"" << _system.Name() << "\"." << std::endl;
+									}
 
 								// Return the yield for this transition
 								this->Data() << std::real(arma::trace(Iprojx * (*j)->Rate() * P * _rho)) << " ";
@@ -391,12 +390,11 @@ namespace RunSection
 		else
 		{
 			this->Log() << "No nucleus was specified for projection" << std::endl;
-		} 
-
+		}
 
 		return true;
 
-		//for (auto j = states.cbegin(); j != states.cend(); j++)
+		// for (auto j = states.cbegin(); j != states.cend(); j++)
 		//{
 		//	if (!_space.GetState((*j), P))
 		//	{
@@ -404,7 +402,7 @@ namespace RunSection
 		//		continue;
 		//	}
 
-			// Return the yield for this state - note that no reaction rates are included here.
+		// Return the yield for this state - note that no reaction rates are included here.
 		//	this->Data() << std::abs(arma::trace(P * _rho)) << " ";
 		//}
 	}
@@ -450,12 +448,12 @@ namespace RunSection
 						else
 						{
 							// Write each state name
-							//auto states = (*i)->States();
-							//for (auto j = states.cbegin(); j != states.cend(); j++)
+							// auto states = (*i)->States();
+							// for (auto j = states.cbegin(); j != states.cend(); j++)
 							//{
-								_stream << (*i)->Name() << "." << (*l)->Name() << "." << "Ix ";
-								_stream << (*i)->Name() << "." << (*l)->Name() << "." << "Iy ";
-								_stream << (*i)->Name() << "." << (*l)->Name() << "." << "Iz ";
+							_stream << (*i)->Name() << "." << (*l)->Name() << "." << "Ix ";
+							_stream << (*i)->Name() << "." << (*l)->Name() << "." << "Iy ";
+							_stream << (*i)->Name() << "." << (*l)->Name() << "." << "Iz ";
 							//}
 						}
 					}

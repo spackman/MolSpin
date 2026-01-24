@@ -44,6 +44,10 @@ namespace RunSection
 			this->WriteHeader(this->Data());
 		}
 
+		// Obtain results
+		this->Data() << this->RunSettings()->CurrentStep() << " ";
+		this->WriteStandardOutput(this->Data());
+
 		// Loop through all SpinSystems
 		auto systems = this->SpinSystems();
 		for (auto i = systems.cbegin(); i != systems.cend(); i++) // iteration through all spin systems, in this case (or usually), this is one
@@ -772,10 +776,6 @@ namespace RunSection
 
 			arma::mat ans = arma::trapz(time, ExptValues);
 
-			// Obtain results
-			this->Data() << this->RunSettings()->CurrentStep() << " ";
-			this->WriteStandardOutput(this->Data());
-
 			for (int it = 0; it < num_transitions; it++)
 			{
 				if (correction)
@@ -790,9 +790,8 @@ namespace RunSection
 				}
 				this->Data() << std::setprecision(6) << ans(0, it) << " ";
 			}
-
-			this->Data() << std::endl;
 		}
+		this->Data() << std::endl;
 		return true;
 	}
 
