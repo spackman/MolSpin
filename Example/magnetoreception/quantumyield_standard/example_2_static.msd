@@ -70,11 +70,11 @@ SpinSystem system1
 
     Interaction radical1hyperfineFADH6
     {
-		prefactor = 0.001;
-        type = hyperfine;
-        group1 = RPElectron1;
-        group2 = FADH6;
-		tensor = isotropic(1);
+		  prefactor = 0.001;
+      type = hyperfine;
+      group1 = RPElectron1;
+      group2 = FADH6;
+		  tensor = isotropic(1);
     }
 
     Interaction radical1hyperfineFADN5
