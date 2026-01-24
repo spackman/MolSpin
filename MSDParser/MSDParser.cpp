@@ -10,6 +10,7 @@
 #include "RunSection.h"
 #include "MSDParser.h"
 #include "FileReader.h"
+#include <exception>
 
 // SpinAPI files
 #include "Spin.h"
@@ -146,27 +147,40 @@ namespace MSDParser
 		}
 
 		// Put spins into other objects - this can only be done now that all spins have been loaded
+		int failed = 0;
 		for (auto i = this->systems.cbegin(); i != this->systems.cend(); i++)
 		{
 			// Prepare the state objects
 			auto failedStates = (*i)->ValidateStates();
 			for (auto j = failedStates.cbegin(); j != failedStates.cend(); j++)
+			{
 				std::cout << "Failed to load state " << (*j)->Name() << "!" << std::endl;
+				failed += 1;
+			}
 
 			// Load Spins into Interaction objects
 			auto failedInteractions = (*i)->ValidateInteractions();
 			for (auto j = failedInteractions.cbegin(); j != failedInteractions.cend(); j++)
+			{
 				std::cout << "Failed to load interaction " << (*j)->Name() << "!" << std::endl;
+				failed += 1;
+			}
 
 			// Prepare Operator objects
 			auto failedOperators = (*i)->ValidateOperators(this->systems);
 			for (auto j = failedOperators.cbegin(); j != failedOperators.cend(); j++)
+			{
 				std::cout << "Failed to load operator object " << (*j)->Name() << "!" << std::endl;
+				failed += 1;
+			}
 
 			// Load Spins into Pulses objects
 			auto failedpulses = (*i)->ValidatePulses();
 			for (auto j = failedpulses.cbegin(); j != failedpulses.cend(); j++)
+			{
 				std::cout << "Failed to load pulse " << (*j)->Name() << "!" << std::endl;
+				failed += 1;
+			}
 		}
 
 		// Put states into other objects - this can only be done now that all states have been loaded
@@ -175,7 +189,10 @@ namespace MSDParser
 			// Load States into Transition objects
 			auto failedTransitions = (*i)->ValidateTransitions(this->systems);
 			for (auto j = failedTransitions.cbegin(); j != failedTransitions.cend(); j++)
+			{
 				std::cout << "Failed to load transition " << (*j)->Name() << "!" << std::endl;
+				failed += 1;
+			}
 		}
 
 		// validating subsystems;
@@ -185,9 +202,17 @@ namespace MSDParser
 			for (auto j = failedsubsystems.cbegin(); j != failedsubsystems.cend(); j++)
 			{
 				std::cout << "Failed to load SubSystem " << (*j)->Name() << "!" << std::endl;
+				failed += 1;
 			}
 
 			SpinAPI::LinkTransitions(*i);
+		}
+
+		if(failed > 0)
+		{
+			#if ASSERT == 1
+				throw std::exception();
+			#endif
 		}
 
 		return true;

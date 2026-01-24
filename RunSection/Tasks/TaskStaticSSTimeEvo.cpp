@@ -10,11 +10,15 @@
 #include "Transition.h"
 #include "Operator.h"
 #include "Settings.h"
+#include "Interaction.h"
 #include "State.h"
 #include "SpinSpace.h"
 #include "SpinSystem.h"
 #include "ObjectParser.h"
 
+// #ifdef USE_OPENBLAS
+extern "C" void openblas_set_num_threads(int);
+// #endif
 namespace RunSection
 {
 	// -----------------------------------------------------
@@ -47,8 +51,10 @@ namespace RunSection
 
 		// Obtain spin systems
 		auto systems = this->SpinSystems();
-		std::pair<arma::cx_mat, arma::cx_vec> P[systems.size()]; // Create array containing a propagator and the current state of each system
+		std::pair<arma::cx_mat, arma::cx_vec> P[systems.size()]; // Create array containing a propagator and the current state of each system //LINE MODIFIED FOR SW
 		SpinAPI::SpinSpace spaces[systems.size()];				 // Keep a SpinSpace object for each spin system
+		SCData SWdata[systems.size()];
+		bool SW[systems.size()];
 
 		// Loop through all SpinSystems
 		int ic = 0; // System counter
@@ -175,18 +181,19 @@ namespace RunSection
 			}
 
 			// Get the Hamiltonian
-			arma::cx_mat H;
-			if (!space.Hamiltonian(H))
+			arma::sp_cx_mat H;
+			if (!space.Hamiltonian(H, static_cast<int>(this->name)))
 			{
 				this->Log() << "Failed to obtain Hamiltonian in superspace." << std::endl;
 				continue;
 			}
 
 			// Get a matrix to collect all the terms (the total Liouvillian)
-			arma::cx_mat A = arma::cx_double(0.0, -1.0) * H;
+			SCData DataStruct = GetHamiltonian(H,space.SpaceDimensions());
+			arma::sp_cx_mat A = arma::cx_double(0.0, -1.0) * DataStruct.H;
 
 			// Get the reaction operators, and add them to "A"
-			arma::cx_mat K;
+			arma::sp_cx_mat K;
 			if (!space.TotalReactionOperator(K))
 			{
 				this->Log() << "Warning: Failed to obtain matrix representation of the reaction operators!" << std::endl;
@@ -205,7 +212,23 @@ namespace RunSection
 			}
 
 			// Get the propagator and put it into the array together with the initial state
-			P[ic] = std::pair<arma::cx_mat, arma::cx_vec>(arma::expmat(A * this->timestep), rho0vec);
+			bool SC = false;
+			if(DataStruct.SamplesMatrix.n_nonzero != 0)
+			{
+				SC = true;
+			}
+
+
+			if(!SC)
+			{
+				P[ic] = std::pair<arma::cx_mat, arma::cx_vec>(arma::expmat(arma::conv_to<arma::cx_mat>::from(A) * this->timestep), rho0vec);
+			}
+			else
+			{
+				P[ic] = std::pair<arma::cx_mat, arma::cx_vec>(arma::conv_to<arma::cx_mat>::from(A),rho0vec);
+			}
+			SWdata[ic] = DataStruct;
+			SW[ic] = SC;
 			++ic;
 		}
 
@@ -213,10 +236,56 @@ namespace RunSection
 		this->Data() << this->RunSettings()->CurrentStep() << " 0 "; // "0" refers to the time
 		this->WriteStandardOutput(this->Data());
 		ic = 0;
+
+		std::vector<std::vector<std::pair<int,arma::cx_vec>>> SCresults;
+		std::vector<std::vector<std::pair<int,double>>> SCweights;
+		std::vector<std::vector<arma::sp_cx_mat>> As;
+		std::vector<std::vector<std::vector<std::vector<double>>>> AllWeights;
+		std::vector<std::pair<std::vector<double>,std::vector<int>>> BLandSamples;
+		std::vector<std::vector<std::vector<double>>> SampleSpacing;
+		std::vector<std::vector<std::vector<double>>> SampleWeights;
+		std::vector<std::vector<std::pair<int,arma::cx_vec>>> rho0s;
+
 		for (auto i = systems.cbegin(); i != systems.cend(); i++)
 		{
+			if(SW[ic])
+			{
+				AllWeights.push_back({{}});
+				BLandSamples.push_back({});
+				SampleSpacing.push_back({});
+				As.push_back({});
+				SCresults.push_back({});
+				SCweights.push_back({});
+				SampleWeights.push_back({});
+				rho0s.push_back({});
+
+				for(auto e = (*i)->interactions_cbegin(); e != (*i)->interactions_cend(); e++)
+				{
+					if((*e)->Type() == SpinAPI::InteractionType::SemiClassicalField)
+					{
+						AllWeights[ic][0].push_back((*e)->GetOriWeights());
+						std::vector<double> BL = (*e)->VL();
+						double BMax = std::reduce(BL.begin(), BL.end());
+						BLandSamples[ic].first.push_back(BMax);
+						BLandSamples[ic].second.push_back((*e)->Orientations());
+						SampleSpacing[ic].push_back((*e)->GetSpacing());
+					}
+				}
+
+				std::vector<SCData> SysData= {SWdata[ic]};
+				arma::sp_cx_mat A = arma::conv_to<arma::sp_cx_mat>::from(P[ic].first);
+				GetSamples(As[ic],A, SysData, SampleWeights[ic], AllWeights[ic]);
+			}
+
 			arma::cx_mat PState;
 			auto states = (*i)->States();
+			//Convert the resulting density operator back to its Hilbert space representation
+			if (!spaces[ic].OperatorFromSuperspace(P[ic].second, rho0))
+			{
+				this->Log() << "Failed to convert resulting superspace-vector back to native Hilbert space." << std::endl;
+				continue;
+			}
+
 			for (auto j = states.cbegin(); j != states.cend(); j++)
 			{
 				if (!spaces[ic].GetState((*j), PState))
@@ -227,14 +296,60 @@ namespace RunSection
 
 				this->Data() << std::abs(arma::trace(PState * rho0)) << " ";
 			}
-
 			++ic;
 		}
 		this->Data() << std::endl;
 
 		// Perform the calculation
 		this->Log() << "Ready to perform calculation." << std::endl;
+		//only testing exp propogator at the moment
 		unsigned int steps = static_cast<unsigned int>(std::abs(this->totaltime / this->timestep));
+		std::vector<std::vector<std::pair<int, arma::cx_mat>>> Propagators;
+		ic = 0;
+		for (auto i = systems.cbegin(); i != systems.cend(); i++)
+		{
+			std::vector<std::pair<int,arma::cx_mat>> exp_prop;
+			if(SW[ic])
+			{
+				openblas_set_num_threads(1);
+				this->Log() << "Using exponential propogator" << std::endl;
+				this->Log() << "Calculating the propagator..." << std::endl;
+				arma::cx_mat temp_mat;
+				arma::cx_vec temp_vec;
+				for (unsigned int e = 0; e < As[ic].size(); e++)
+				{
+					exp_prop.push_back({0,temp_mat});
+					SCweights[ic].push_back({0,0.0});
+					rho0s[ic].push_back({e,temp_vec});
+				}
+				unsigned int threads = GetNumThreads();
+				//threads = (unsigned int)std::floor((double)threads / 2.0);
+				#pragma omp parallel for num_threads(threads)
+				for (unsigned int e = 0; e < As[ic].size(); e++)
+				{
+					arma::cx_mat expP = arma::expmat(arma::conv_to<arma::cx_mat>::from(As[ic][e]) * this->timestep);
+					std::vector<double> weights = SampleWeights[ic][e];
+					double weight_product = 1.0;
+					for(unsigned int j = 0; j < weights.size(); j++)
+					{
+						weight_product *= weights[j];
+					}
+					#pragma omp critical
+					{
+						exp_prop[e] = {e,expP};
+						SCweights[ic][e] = {e,weight_product};
+						rho0s[ic][e] = {e,P[ic].second};
+					}
+				}
+				Propagators.push_back(exp_prop);
+			}
+			else
+			{
+				exp_prop.push_back({0,P[ic].first});
+				Propagators.push_back(exp_prop);
+			}
+		}
+
 		for (unsigned int n = 1; n <= steps; n++)
 		{
 			// Write first part of the data output
@@ -244,12 +359,35 @@ namespace RunSection
 
 			// Loop through the systems again and progress a step
 			ic = 0;
-			for (auto i = systems.cbegin(); i != systems.cend(); i++)
+			for(auto i = systems.cbegin(); i != systems.cend(); i++)
 			{
-				// Take a step "first" is propagator and "second" is current state
-				rho0vec = P[ic].first * P[ic].second;
-				P[ic].second = rho0vec;
-
+				arma::cx_vec result = arma::zeros<arma::cx_vec>(rho0vec.n_rows);
+				if(SW[ic])
+				{
+					SCresults[ic].clear();
+					#pragma omp parallel for
+					for(unsigned int e = 0; e < Propagators[ic].size(); e++)
+					{
+						arma::cx_vec tmp = Propagators[ic][e].second * rho0s[ic][e].second;
+						#pragma omp critical
+						{
+							SCresults[ic].push_back({Propagators[ic][e].first, tmp * SCweights[ic][e].second});
+							//SCresults[ic].push_back({e, tmp * SCweights[ic][e].second});
+							//std::cout << arma::trace(tmp) << std::endl;
+						}
+						rho0s[ic][e] = {Propagators[ic][e].first,tmp};
+					}
+					std::pair<arma::cx_vec, double> results = IntegrateSC(SCresults[ic], SCweights[ic], SCIntegrationProperties{BLandSamples[ic].first, BLandSamples[ic].second, SampleSpacing[ic]});
+					result = results.first;
+					P[ic].second = result;
+				}
+				else
+				{
+					result = Propagators[ic][0].second * P[ic].second;
+					P[ic].second = result;
+				}
+				
+				rho0vec = P[ic].second;
 				// Convert the resulting density operator back to its Hilbert space representation
 				if (!spaces[ic].OperatorFromSuperspace(rho0vec, rho0))
 				{
@@ -307,6 +445,7 @@ namespace RunSection
 	{
 		double inputTimestep = 0.0;
 		double inputTotaltime = 0.0;
+		this->name = TaskName::STATICSS_TIMEVO;
 
 		// Get timestep
 		if (this->Properties()->Get("timestep", inputTimestep))
@@ -321,6 +460,21 @@ namespace RunSection
 				return false;
 			}
 		}
+
+		//Get Propogator
+		std::string propagator_str;
+		if (!this->Properties()->Get("Propagator", propagator_str) && !this->Properties()->Get("propagator", propagator_str))
+		{
+			this->Log() << "No propagator defined, using the default propogator (RK45)" << std::endl;
+		}
+		else
+		{
+			this->SelectPropagator(propagator_str);
+		}
+		
+		if(this->prop == Propagator::Default)
+			this->prop = Propagator::exp;
+
 
 		// Get totaltime
 		if (this->Properties()->Get("totaltime", inputTotaltime))

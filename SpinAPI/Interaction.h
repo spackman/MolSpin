@@ -11,6 +11,8 @@
 #define MOD_SpinAPI_Interaction
 
 #include <vector>
+#include <functional> 
+#include <array>
 #include <memory>
 #include <armadillo>
 #include "SpinAPIDefines.h"
@@ -21,7 +23,17 @@
 
 namespace SpinAPI
 {
+	typedef std::tuple<SCMatrix3x3,int,double> SCHyperfineField;
+	typedef std::function<double (std::array<double,3>)> SCDistributionF;
 
+	enum class SCDistribution
+	{
+		FJC = 0, //Freely jointed chain
+		DEFUALT //is FJC
+	};
+
+	std::ostream &operator<<(std::ostream&, const SCMatrix3x3&);
+	
 	class Interaction
 	{
 	private:
@@ -31,8 +43,7 @@ namespace SpinAPI
 
 		arma::vec field;				// Field vector for one-spin interactions, i.e. "B" in "S1 * B". Example: Magnetic field in Zeeman interaction.
 		double dvalue, evalue;			// D and E value for zero-field splitting
-		double hfiamplitude;
-		int orientations;
+		bool EnergyShift;
 		std::vector<spin_ptr> group1;	// Spins to use for one-spin interaction and left-hand-side of two-spin interaction
 		std::vector<spin_ptr> group2;	// Spins to use on right-hand-side of coupling tensor in two-spin interaction
 		InteractionType type;			// Interaction type (one-spin / two-spin)
@@ -78,6 +89,15 @@ namespace SpinAPI
 		double tdAmp;
 		bool tdPrintTensor;
 		bool tdPrintField;
+
+		//Special data members for Semi-Classical
+		std::vector<SCHyperfineField> hffield;
+		unsigned int orientations;
+		std::vector<double> OriWeights;
+		std::vector<double> BondLengths;
+		std::vector<double> Spacing;
+		double tau;
+		SCDistribution dist;
 
 		// Special data members for random number generation
 		int tdSeed;
@@ -135,8 +155,13 @@ namespace SpinAPI
 		const arma::vec Field() const;
 		const double Dvalue() const;
 		const double Evalue() const;
-		const double Hfiamplitude() const;
+		const bool ES() const {return this->EnergyShift; };
+		//const double Hfiamplitude() const;
+		const std::vector<SCHyperfineField> Hfiamplitude() const;
 		const int Orientations() const;
+		std::vector<double>& GetOriWeights() { return this->OriWeights; };
+		std::vector<double>& GetSpacing() { return this->Spacing; };
+		const std::vector<double> VL() const { return this->BondLengths; }
 		bool HasFieldTimeDependence() const;
 		bool HasTensorTimeDependence() const;
 		bool HasTimeDependence() const;
@@ -161,6 +186,9 @@ namespace SpinAPI
 
 		// Public method for creating ActionTargets
 		void GetActionTargets(std::vector<RunSection::NamedActionScalar> &, std::vector<RunSection::NamedActionVector> &, const std::string &);
+
+		//get distribution functiom
+		SCDistributionF f;
 	};
 
 	// Define alias for interaction-pointers
@@ -182,6 +210,10 @@ namespace SpinAPI
 	// Non-member non-friend functions for ActionTarget validation
 	bool CheckActionVectorInteractionField(const arma::vec &);
 	bool CheckActionScalarInteractionPrefactor(const double &);
+
+	//semi classical distributions
+    void FreelyJointedPolymerBL(std::vector<double>&, std::vector<SCHyperfineField>&, double&, int); //length of the nuclear spin vector
+	SCDistributionF FreelyJointedPolymerD(double,double); //Distribution of the nuclear spin vector
 }
 
 #endif

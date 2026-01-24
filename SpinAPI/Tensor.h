@@ -135,6 +135,14 @@ namespace SpinAPI
 	bool HasTrajectory(const Tensor &);
 	bool IsIsotropic(const Tensor &); // Tensor isotropy
 
+	//SemiClassical specific functions 
+	typedef std::array<std::array<double,3>,3> SCMatrix3x3;
+	///A SemiClassical operator specific function that parses a string defined in the semi-classical field and returns a 3x3 matrix
+	///@param input_str A string defined as "isotropic(...)" or "anisotropic(... ... ...)" or "matrix(... ... ...; ... ... ...; ... ... ...)"
+	///@param return_matrix A 3x3 double array
+	///@return a boolean to confirm correct parsing - will currently only accept isotropic tensors due to incomplete theory
+	bool Parse3x3TensorLikeArrayFromString(const std::string& input_str, SCMatrix3x3& return_matrix);
+
 	// Non-member non-friend functions for ActionTarget validation
 	bool CheckActionScalarTensorIsotropicPart(const double &);
 }

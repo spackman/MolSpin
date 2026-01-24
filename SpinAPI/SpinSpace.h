@@ -19,6 +19,7 @@
 // (c) 2019 Quantum Biology and Computational Physics Group.
 // See LICENSE.txt for license information.
 /////////////////////////////////////////////////////////////////////////
+
 #ifndef MOD_SpinAPI_SpinSpace
 #define MOD_SpinAPI_SpinSpace
 
@@ -264,8 +265,10 @@ namespace SpinAPI
 		bool InteractionOperator(const interaction_ptr &, arma::sp_cx_mat &) const; // Returns the matrix representation of the interaction on the spin space (sparse matrix)
 		bool InteractionOperatorRotated(const interaction_ptr &, arma::mat &, arma::sp_cx_mat &) const;
 		bool InteractionOperatorRotatedLegacy(const interaction_ptr &, arma::mat &, arma::sp_cx_mat &) const;
-		bool Hamiltonian(arma::cx_mat &) const;										// Total Hamiltonian operator (dense matrix)
-		bool Hamiltonian(arma::sp_cx_mat &) const;									// Total Hamiltonian operator (sparse matrix)
+		bool Hamiltonian(arma::cx_mat &, int TaskNum = 0) const;										// Total Hamiltonian operator (dense matrix)
+		bool Hamiltonian(arma::sp_cx_mat &, int TaskNum = 0) const;									// Total Hamiltonian operator (sparse matrix)
+		bool SemiClassicalHamiltonian(arma::sp_cx_mat &, std::vector<interaction_ptr>&) const; 					// SemiClassical approximation of the Hamiltonian (sparse matrix), refer to BasicTask.cpp for tasknum conversion
+		bool SemiClassicalHamiltonian(arma::cx_mat &, std::vector<interaction_ptr>&) const; 					// SemiClassical approximation of the Hamiltonian (dense matrix), refer to BasicTask.cpp for tasknum conversion 	 					
 		bool StaticHamiltonian(arma::cx_mat &) const;								// Time-independent part of the Hamiltonian operator (dense matrix)
 		bool StaticHamiltonian(arma::sp_cx_mat &) const;							// Time-independent part of the Hamiltonian operator (sparse matrix)
 		bool DynamicHamiltonian(arma::cx_mat &) const;								// Time-dependent part of the Hamiltonian operator (dense matrix)
@@ -342,6 +345,11 @@ namespace SpinAPI
 		bool SetReactionOperatorType(const ReactionOperatorType &); // Sets the type of reaction operator to be produced - NOTE: Only works in superspace
 		bool SetTime(double);										// Set the current time, used to set states from trajectories (provided the trajectories have "time" columns, otherwise first step is used)
 		bool SetTrajectoryStep(unsigned int);						// Set the current step to be used in all trajectories (trajectories with too few steps will use last step)
+	private:
+		bool InternalCreateSCCompositeMatrix(const SpinAPI::interaction_ptr&, int, arma::sp_cx_mat&) const;
+		bool InternalCreateSCCompositeMatrix(const SpinAPI::interaction_ptr&, int, arma::cx_mat&) const;
+		bool SCSupportedTasks(int tasknum) const; //refer to BasicTask.cpp for tasknum conversion 
+
 	};
 
 	// Non-member non-friend functions

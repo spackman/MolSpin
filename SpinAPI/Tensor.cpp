@@ -852,11 +852,334 @@ namespace SpinAPI
 		return false;
 	}
 
-	// -----------------------------------------------------
-	// Non-member non-friend ActionTarget Check functions
-	// -----------------------------------------------------
-	// Make sure that the isotropic value has a valid value (not NaN or infinite)
-	bool CheckActionScalarTensorIsotropicPart(const double &_d)
+    bool Parse3x3TensorLikeArrayFromString(const std::string &input_str, SCMatrix3x3 &return_matrix)
+    {
+        enum class TensorType
+		{
+			ISOTROPIC,
+			ANISOTROPICDIAGONAL,
+			FULL,
+			UNKNOWN
+		};
+
+		std::array<std::string,3> tensorTypeStrings = {"isotropic","anisotropic", "matrix"};
+		std::array<int, 3> tensorTypeLengths = {9,11,6};
+		std::vector<double> tensorvalues = {};
+
+		enum class ParseState
+		{
+			START,
+			VALUE,
+			END
+		};
+
+		TensorType tensorType = TensorType::UNKNOWN;
+		ParseState state = ParseState::START;
+		std::string currentValue;
+		size_t i = 0;
+		std::string str = "";
+		for (char c : input_str)
+		{
+			str += std::tolower(c);
+			if(c == '(')
+			{
+				if(input_str[i+1] == '"')
+				{
+					i++;
+					continue;
+				}
+				str += '"';
+			}
+			if(c == ')')
+			{
+				if(input_str[i-1] == '"')
+				{
+					str.insert(str.length()-2, " ");
+					i++;
+					continue;
+				}
+				else
+				{
+					str.insert(str.length()-1, " \"");
+				}
+			}
+			i++;
+		}
+		i=0;
+		while (i < str.size())
+		{
+			char c = str[i];
+			if (c == ')')
+			{
+				state = ParseState::END;
+				i++;
+				continue;
+			}
+			switch (state)
+			{
+			case ParseState::START:
+				if (c == ' ' || c == '\t' || c == '\n')
+				{
+					// Skip whitespace
+					i++;
+					continue;
+				}
+				if (c == '(')
+				{
+					//evaluate tensor type
+					bool search = true;
+					size_t i2 = 0;
+					std::array<bool,3> skip = {false, false, false};
+					int index = 0;
+					while(i2 < currentValue.size() && search)
+					{
+						char c2 = currentValue[i2];
+						for(index = 0; index < 3; index++)
+						{
+							if(skip[index]) continue;
+							if(i2 == (size_t)tensorTypeLengths[index])
+							{
+								skip[index] = true;
+								continue;
+							}
+							if(c2 != tensorTypeStrings[index][i2])
+							{
+								skip[index] = true;
+								continue;
+							}
+						}
+						if(skip[0] && skip[1] && skip[2])
+						{
+							search = false;
+						}
+						i2++;
+					}
+					for(index = 0; index < 3; index++)
+					{
+						if(!skip[index])
+						{
+							tensorType = static_cast<TensorType>(index);
+							break;
+						}
+					}
+					if(tensorType == TensorType::UNKNOWN)
+					{
+						std::cout << "[ERROR]: Unknown tensor type in semi classical interaction hyperfine field definition: " << currentValue << std::endl;
+						return false;
+					}
+					currentValue = "";
+					state = ParseState::VALUE;
+					continue;
+				}
+				currentValue += c;
+				break;
+			case ParseState::VALUE: //isotropic -> isotropic("0.5"), anisotropicdiagonal -> anisotropic("0.5 0.1 0.2"), full -> matrix("0.5 0.3 0.1; 0.3; 0.2 0.1 0.3; 0.3 0.5 0.2")
+				if (isdigit(c) || c == '.' || c == ',' || c == '-' || c == 'e')
+				{
+					currentValue += c;
+					i++;
+					continue;
+				}
+				if(c == ' ' || c == '\t' || c == '\n')
+				{
+					//Skip whitespace
+					//evaluate number
+					struct number
+					{
+						bool positive;
+						int v1;
+						int v2;
+						int v2_length;
+						number* power;
+
+						number(bool pos = true, int val1 = 0, int val2 = 0, int val2_len = 0, number* pow = nullptr)
+							: positive(pos), v1(val1), v2(val2), v2_length(val2_len), power(pow) {}
+					};
+					number value;
+					bool decimal = false;
+					auto cVAl = &value;
+					for (auto c2 : currentValue)
+					{
+						if(c2 == '-')
+						{
+							cVAl->positive = false;
+						}
+						else if(c2 == 'e')
+						{
+							cVAl->power = new number;
+							cVAl = cVAl->power;
+							decimal = false;
+						}
+						else if(c2 == '.' || c2 == ',')
+						{
+							decimal = true;
+						}
+					    else if(isdigit(c2))
+						{
+							if(!decimal)
+							{
+								cVAl->v1 = cVAl->v1 * 10 + std::stoi(std::string(1,c2));
+							}
+							else
+							{
+								cVAl->v2 = cVAl->v2 * 10 + std::stoi(std::string(1,c2));
+								cVAl->v2_length += 1;
+							}
+						}
+					}
+					std::function <double(number)> eval;
+					eval = [&eval](number n) -> double
+					{
+						double finalval = double(n.v1);
+						if(n.v2_length > 0)
+						{
+							finalval += double(n.v2) * std::pow(10.0, -1 * n.v2_length);
+						}
+						if(!n.positive)
+						{
+							finalval *= -1.0;
+						}
+						if(n.power != nullptr)
+						{
+							finalval *= std::pow(10.0, eval(*n.power));
+							delete n.power;
+						}
+						return finalval;
+					};
+					double finalvalue = eval(value);
+					tensorvalues.push_back(finalvalue);
+					currentValue = "";
+					i++;
+					continue;
+				}
+				break;
+			case ParseState::END:
+				// Finished parsing
+				i = str.size(); // to exit the while loop
+				break;
+			default:
+				break;
+			}
+			i++;
+		}
+		auto PrintError = [&tensorvalues](unsigned int num)
+		{
+			if(tensorvalues.size() != num)
+			{
+				std::cout << "[ERROR]: Incorrect number of tensor values in semi classical interaction hyperfine field definition. Expected " << num << " values, got " << tensorvalues.size() << " values." << std::endl;
+			}
+			if(tensorvalues.size() > num)
+			{
+				std::cout << "Will only be using the first " << num << " values: ";
+				for(int i = 0; i < num; i++)
+				{
+					std::cout << tensorvalues[i] << " ";
+				}
+				std::cout << std::endl;
+			}
+			if(tensorvalues.size() < num)
+			{
+				std::cout << "Missing tensor values in semi classical interaction hyperfine field definition." << std::endl;
+				std::cout << "Set of values that will be used: ";
+				int tensorvaluessize = tensorvalues.size();
+				for(int i = 0; i < num; i++)
+				{
+					if(i < tensorvaluessize)
+					{
+						std::cout << tensorvalues[i] << " ";
+					}
+					else
+					{
+						std::cout << "0 ";
+						tensorvalues.push_back(0.0);
+					}
+				}
+
+			}
+		};
+		//populate tensor based on type
+		SCMatrix3x3 tensormatrix = {{{0,0,0},{0,0,0},{0,0,0}}};
+		auto CheckSymmetric = [&tensorvalues]() -> bool
+		{
+			if(tensorvalues.size() != 9)
+			{
+				return false;
+			}
+			if(tensorvalues[1] != tensorvalues[3])
+			{
+				return false;
+			}
+			if(tensorvalues[2] != tensorvalues[6])
+			{
+				return false;
+			}
+			if(tensorvalues[5] != tensorvalues[7])
+			{
+				return false;
+			}
+			return true;
+		};
+		switch(tensorType)
+		{
+			case TensorType::ISOTROPIC:
+			{
+				PrintError(1);
+				tensormatrix[0][0] = tensorvalues[0];
+				tensormatrix[1][1] = tensorvalues[0];
+				tensormatrix[2][2] = tensorvalues[0];
+				break;
+			}
+			case TensorType::ANISOTROPICDIAGONAL:
+			{
+				PrintError(3);
+				tensormatrix[0][0] = tensorvalues[0];
+				tensormatrix[1][1] = tensorvalues[1];
+				tensormatrix[2][2] = tensorvalues[2];
+				break;
+			}
+			case TensorType::FULL:
+			{
+				PrintError(9);
+				tensormatrix[0][0] = tensorvalues[0];
+				tensormatrix[0][1] = tensorvalues[1];
+				tensormatrix[0][2] = tensorvalues[2];
+				tensormatrix[1][0] = tensorvalues[3];
+				tensormatrix[1][1] = tensorvalues[4];
+				tensormatrix[1][2] = tensorvalues[5];
+				tensormatrix[2][0] = tensorvalues[6];
+				tensormatrix[2][1] = tensorvalues[7];
+				tensormatrix[2][2] = tensorvalues[8];
+				bool sym = CheckSymmetric();
+				if(!sym)
+				{
+					std::cout << "[ERROR]: Asymmetric tensors are not supported in semi classical interaction hyperfine field definition." << std::endl;
+					return_matrix = tensormatrix;
+					return false;
+				}
+				break;
+			}
+			default:
+				std::cout << "[ERROR]: Unknown tensor type in semi classical interaction hyperfine field definition." << std::endl;
+				return_matrix = tensormatrix;
+				return false;
+		}
+		return_matrix = tensormatrix;
+
+		//incomplete theory - return false for anything but isotropic
+		if(tensorType != TensorType::ISOTROPIC)
+		{
+			std::cout << "[INFO]: Currently MOLSPIN does not support anistropic matrix types for the semi-classical interaction" << std::endl;
+			return false;
+		}
+
+		return true;
+    }
+
+    // -----------------------------------------------------
+    // Non-member non-friend ActionTarget Check functions
+    // -----------------------------------------------------
+    // Make sure that the isotropic value has a valid value (not NaN or infinite)
+    bool CheckActionScalarTensorIsotropicPart(const double &_d)
 	{
 		return std::isfinite(_d);
 	}

@@ -8,9 +8,237 @@
 /////////////////////////////////////////////////////////////////////////
 
 #include "Utility.h"
+#include <random>
+#include <thread>
 
 namespace RunSection
 {
+
+    FibSpherePoint *CalculateFibPoints(int n)
+    {
+        FibSpherePoint* TempPointArray = (FibSpherePoint*)malloc(n * sizeof(FibSpherePoint));
+        if(TempPointArray == NULL)
+        {
+            std::cout << "Memory not allocated" << std::endl;
+            return nullptr;
+        }
+
+        double phi = M_PI * (3.0 - std::sqrt(5.0)); //Golden angle in radians
+        for (int i = 0; i < n; i++)
+        {
+            double y = 1.0 - ((double)i / (double)(n-1)) * 2;
+            double theta = phi * (double)i;
+
+            TempPointArray[i] = {y,theta};
+        }
+        return TempPointArray;
+    }
+
+    bool RetrievePoint(std::array<double, 3> &arr, FibSpherePoint* ptr, int num)
+    {
+        FibSpherePoint p =  ptr[num];
+
+        float y = p.first;
+        float theta = p.second;
+        
+        double r = std::sqrt(1.0 - (y * y));
+        double x = std::cos(theta) * r;
+        double z = std::sin(theta) * r;
+
+        double yd = (double)y;
+
+        arr = {x, yd, z};
+        return true;
+    }
+
+MCSpherePoint* CalculateMCSpherePoints(int n, double rmax_x, double rmax_y, double rmax_z)
+    {
+        MCSpherePoint* TempPointArray = (MCSpherePoint*)malloc(n * sizeof(MCSpherePoint));
+        if(TempPointArray == NULL)
+        {
+            std::cout << "Memory not allocated" << std::endl;
+            return nullptr;
+        }
+        std::random_device RandDev;
+        std::mt19937 Generator(RandDev());
+        std::uniform_real_distribution<double> distPhi(0,2.0*M_PI);
+        std::uniform_real_distribution<double> distTheta(0,M_PI);
+        std::uniform_real_distribution<double> distScale(0,1);
+        
+        for(int i = 0; i < n; i++)
+        {
+            double phi = distPhi(Generator);
+            double theta = distTheta(Generator);
+            double scalefactor = std::pow(distScale(Generator), 1.0/3.0);
+            
+            double r_x = scalefactor * rmax_x;
+            double r_y = scalefactor * rmax_y;
+            double r_z = scalefactor * rmax_z;
+            TempPointArray[i] = {theta, phi, {r_x, r_y, r_z}};
+            //TempPointArray[i] = {theta,phi,r};
+        }
+
+        std::vector<MCSpherePoint> UniquePoints;
+        UniquePoints.push_back(TempPointArray[0]);  
+        for (int i = 1; i < n; i++)
+        {
+            if(std::find(UniquePoints.begin(), UniquePoints.end(), TempPointArray[i]) == UniquePoints.end())
+            {
+                UniquePoints.push_back(TempPointArray[i]);
+            }
+            else
+            {
+                std::cin.get();
+            }
+        }
+        return TempPointArray;
+    }
+
+    MCSpherePoint* CalculateMCSpherePoints(int n, double rmax)
+    {
+        return CalculateMCSpherePoints(n, rmax, rmax, rmax);
+    }
+
+
+    bool RetrieveMCPoint(std::array<double, 3> &arr, MCSpherePoint *ptr, int num)
+    {
+        MCSpherePoint p = ptr[num];
+        
+        double theta = p.theta;
+        double phi = p.phi;
+        auto r = p.r;
+
+        double x = r[0] * std::sin(theta) * std::cos(phi);
+        double y = r[1] * std::sin(theta) * std::sin(phi);
+        double z = r[2] * std::cos(theta);
+
+        arr = {x,y,z};
+        return true;
+    }
+
+    SCData GetHamiltonian(arma::sp_cx_mat& CompositeMatrix, int Dimension)
+    {
+        SCData container;
+        arma::sp_cx_mat H = CompositeMatrix.submat(0,0,Dimension-1,Dimension-1);
+        arma::sp_cx_mat SampleMatrix = CompositeMatrix.submat(Dimension,0,CompositeMatrix.n_rows-1,CompositeMatrix.n_cols-1);
+        for (unsigned int i = 0; i < SampleMatrix.n_rows; i += Dimension)
+        {
+            int samples = 0;
+            for (unsigned int e = 0; e < SampleMatrix.n_cols; e+= Dimension)
+            {
+                arma::sp_cx_mat SubMat = SampleMatrix.submat(i,e,i+Dimension-1,e+Dimension-1);
+                if(SubMat.n_nonzero == 0)
+                    break;
+                
+                samples += 1;
+            }
+            container.samples.push_back(samples);
+        }
+        container.H = H;
+        container.SamplesMatrix = SampleMatrix;
+        container.BlockSize = Dimension;
+        
+        return container;
+    }
+
+    arma::sp_cx_mat GetHamiltonian(const arma::sp_cx_mat H0, int S, const std::vector<arma::sp_cx_mat> HSC, std::vector<std::vector<int>> samples)
+    {
+        int Dimension = H0.n_rows / S;
+        arma::sp_cx_mat H = H0;
+        for (int i = 0; i < S; i++)
+        {
+           int interactions = samples[i].size();
+           for (int e = 0; e < interactions; e++)
+           {
+                int col = samples[i][e] * Dimension;
+                int row = e * Dimension;
+
+                arma::sp_cx_mat sample = HSC[i].submat(row, col, row + Dimension - 1, col + Dimension -1);
+                H.submat(i * Dimension, i * Dimension, (i+1)*Dimension -1, (i+1)*Dimension -1) += arma::cx_double(0.0,-1.0) * sample;
+           } 
+        }
+        return H;
+    }
+
+    std::vector<SampleCombination> GenerateCombinationsNI(const std::vector<std::vector<int>>& orientations , int startpoint, int endpoint)
+    {
+        int num = 1;
+        std::vector<int> steps;
+        std::vector<int> NumInteractionsPerSpinSystem;
+        std::vector<SampleCombination> samples;
+        int samplelength = 0;
+        for(unsigned int i = 0; i < orientations.size(); i++)
+        {
+            samplelength += orientations[i].size();
+            NumInteractionsPerSpinSystem.push_back(orientations[i].size());
+            for(unsigned int e = 0; e < orientations[i].size(); e++)
+            {
+                steps.push_back(orientations[i][e]);
+                num = num * steps[samplelength-orientations[i].size()+e];
+            }
+        }
+
+        //generate num samples of length samplelength
+        std::vector<int> Combination;
+        for(int i = 0; i < samplelength; i++)
+        {
+            Combination.push_back(0);
+        }
+        int depth = steps.size();
+        Combination[depth-1] = -1;
+        if(endpoint == 0)
+        {
+            endpoint = num;
+        }
+        if(startpoint != 0)
+        {
+            //calculate start combination
+            std::vector<int> remainders = {};
+            int r = startpoint % steps[depth-1];
+            remainders.insert(remainders.begin(),r);
+            int temp = startpoint - r;
+            int m = temp / steps[depth-1];
+            for (int i = depth-2; i >= 0; i--)
+            {
+                r = m % steps[i];
+                temp = m - r;
+                remainders.insert(remainders.begin(),r);
+                m = temp / steps[i];
+            }
+            Combination = remainders;
+            startpoint +=1;
+        }
+        for (int i = startpoint; i < endpoint; i++)
+        {
+            Combination[depth-1] += 1;
+            for (int e = depth-2; e >= 0; e--)
+            {
+                if(Combination[e+1] == steps[e+1])
+                {
+                    Combination[e] += 1;
+                    Combination[e+1] = 0;
+                    continue;
+                }
+            }
+
+            int s = 0;
+            SampleCombination s1;
+            for(unsigned int a = 0; a < NumInteractionsPerSpinSystem.size(); a++)
+            {
+                std::vector<int> temp;
+                for(int e = 0; e < NumInteractionsPerSpinSystem[a]; e++)
+                {
+                    temp.push_back(Combination[e+s]);
+                }
+                s1.push_back(temp);
+                s += NumInteractionsPerSpinSystem[a];
+            }
+            samples.push_back(s1);
+        }
+        return samples;
+        
+    }
+
     typedef arma::sp_cx_mat MatrixArma;
     typedef arma::cx_vec VecType;
 
@@ -121,7 +349,13 @@ namespace RunSection
         drhodt = RK4;
         return NewStepSize;
     }
-  
+
+    unsigned int GetNumThreads()
+    {
+        auto processor_count = std::thread::hardware_concurrency();
+        return processor_count;
+    }
+
     arma::cx_vec ThomasBlockSolver(arma::sp_cx_mat &A, arma::cx_vec &b, int block_size, std::vector<arma::sp_cx_mat>CachedBlocks)
     {
         int n_blocks = A.n_rows / block_size; //the total number of blocks in the matrix (including those that are zero)

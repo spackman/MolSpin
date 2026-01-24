@@ -129,6 +129,20 @@ namespace SpinAPI
 		void Print(bool _printFullState = false);
 		std::vector<state_ptr> GetAllStates() { return this->states; };
 		std::shared_ptr<MSDParser::ObjectParser> GetProperties() const {return this->properties;};
+
+		template <typename t>
+		bool RemoveFailedObjects(std::vector<t>& failed, std::vector<t>& total)
+		{
+			std::vector<t> tmpvector = total;
+			int removed = 0;
+			for(unsigned int i = 0; i < failed.size(); i++)
+			{
+				auto it = std::find(total.begin(), total.end(), failed[i-removed]);
+				total.erase(it);
+				removed += 1;
+			}
+			return true;
+		}
 		 
 	};
 

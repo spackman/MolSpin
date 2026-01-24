@@ -14,10 +14,65 @@
 // #include <Eigen/Sparse>
 // #include <Eigen/Core>
 #include "SpinAPIfwd.h"
+#include <utility>
 
 namespace RunSection
 {
+#pragma region FibSphere
+    typedef std::pair<float, float> FibSpherePoint;
+    FibSpherePoint* CalculateFibPoints(int n);
+    bool RetrievePoint (std::array<double, 3> &arr, FibSpherePoint* ptr, int num);
+#pragma endregion
+
+#pragma region MonteCarloSphere
     
+    struct MCSpherePoint
+    {
+        double theta;
+        double phi;
+        std::array<double, 3> r;
+
+        bool operator==(const MCSpherePoint &other) const
+        {
+            return (theta == other.theta) && (phi == other.phi) && (r[0] == other.r[0]) && (r[1] == other.r[1]) && (r[2] == other.r[2]);
+        }
+    };
+    ///Function to uniformly generate points within a elipsoid
+    /// @param n number of points to sample
+    /// @param rmax_x maximum radius in the x direction
+    /// @param rmax_y maximum radius in the y direction
+    /// @param rmax_z maximum radius in the z direction
+    MCSpherePoint* CalculateMCSpherePoints(int n, double rmax_x, double rmax_y, double rmax_z);
+    ///Overload of the full CalculateMCSpherePoints function for sphere
+    /// @param n number of points
+    /// @param rmax_n maxiumum radius
+    MCSpherePoint* CalculateMCSpherePoints(int n, double rmax);
+    bool RetrieveMCPoint (std::array<double, 3> &arr, MCSpherePoint* ptr, int num);
+#pragma endregion
+
+#pragma region SemiClassical
+    struct SCData
+    {
+        arma::sp_cx_mat H; //Hamiltonian
+        arma::sp_cx_mat SamplesMatrix; 
+        
+        std::vector<int> samples;
+        int BlockSize; 
+    };
+    SCData GetHamiltonian(arma::sp_cx_mat&, int); //rename function so not to confuse
+    ///Function to gernerate the sampled hamiltonian
+    /// @param H0: the base hamiltonian without the sampled semi classical operator
+    /// @param S: number of spin systems
+    /// @param HSC: the collection of sampled semiclassical interactions 
+    /// @param config: which samples to use, from each spin system
+    arma::sp_cx_mat GetHamiltonian(const arma::sp_cx_mat, int, const std::vector<arma::sp_cx_mat>, std::vector<std::vector<int>>);
+
+    typedef std::vector<std::vector<int>> SampleCombination;
+    std::vector<SampleCombination> GenerateCombinationsNI(const std::vector<std::vector<int>>&, int startpoint = 0, int endpont = 0); //non independent spin systems 
+    //std::vector<std::vector<int>> GenerateCombinationsI(const std::vector<std::vector<int>>&); //independent spin systems
+
+#pragma endregion
+#pragma region TimeEvo
     typedef arma::cx_vec (*RungeKuttaFuncArma)(double t, arma::sp_cx_mat &, arma::cx_vec &, arma::cx_vec);
     
     /// Runge-Kutta-Fehlberg method (4th and 5th order) with adaptive time step control
@@ -32,6 +87,9 @@ namespace RunSection
     ///     @param time: Current time (double) - Optional, default = 0
     ///     @return New time step (double)
     double RungeKutta45Armadillo(arma::sp_cx_mat &, arma::cx_vec &, arma::cx_vec &, double, RungeKuttaFuncArma, std::pair<double, double>, double MinTimeStep = 1e-6, double MaxTimeStep = 1e6, double time = 0);
+
+#pragma endregion 
+    unsigned int GetNumThreads();
 
 #pragma region BlockMatrixInversionSolvers
     //With these solvers there is the potential for a large amount of matrix fill-in during the solution process.

@@ -18,6 +18,9 @@
 #include "Pulse.h"
 #include "SpinSpace.h"
 #include "SpinSystem.h"
+#include "Utility.h"
+
+#include <array>
 
 // Include additional source files
 #include "SpinSpace/SpinSpace_management.cpp"

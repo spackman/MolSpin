@@ -405,165 +405,173 @@ int main(int argc, char **argv)
 	// std::setprecision(9);
 
 	// Load input file to setup the RunSection object
-	{
+	try
+	{	
+		{
+			if (!silentMode)
+			{
+				std::cout << hline << std::endl;
+				std::cout << "# Loading input file(s)..." << std::endl;
+			}
+
+			std::string strargv(argv[argc - 1]);
+			MSDParser::MSDParser parser(strargv);
+
+			// Attempt to load the input file
+			if (!parser.Load())
+			{
+				std::cout << "ERROR: Failed to open file \"" << strargv << "\"!" << std::endl;
+				return 1;
+			}
+
+			parser.FillRunSection(rs);
+		}
+
+		// Notify that we are ready to perform actual calculations
 		if (!silentMode)
 		{
 			std::cout << hline << std::endl;
-			std::cout << "# Loading input file(s)..." << std::endl;
+			std::cout << "# Input loaded and objects prepared in " << timer.toc() << " seconds." << std::endl;
+			std::cout << hline << std::endl;
 		}
 
-		std::string strargv(argv[argc - 1]);
-		MSDParser::MSDParser parser(strargv);
-
-		// Attempt to load the input file
-		if (!parser.Load())
+		// Output all defined names and included files
+		if (showDefines)
 		{
-			std::cout << "ERROR: Failed to open file \"" << strargv << "\"!" << std::endl;
-			return 1;
+			auto fl = MSDParser::FileReader::GetFileList();
+			auto defnames = MSDParser::FileReader::GetDefinitions();
+
+			std::cout << "# Included files:" << std::endl;
+			for (auto i = fl.cbegin(); i != fl.cend(); i++)
+				std::cout << " - " << (*i) << std::endl;
+
+			std::cout << "\n# Defined names:" << std::endl;
+			for (auto i = defnames.cbegin(); i != defnames.cend(); i++)
+			{
+				std::cout << " - " << i->first << ": ";
+				if (i->second.empty())
+					std::cout << "<empty>";
+				else
+					std::cout << i->second;
+				std::cout << std::endl;
+			}
+			std::cout << hline << std::endl;
 		}
 
-		parser.FillRunSection(rs);
-	}
-
-	// Notify that we are ready to perform actual calculations
-	if (!silentMode)
-	{
-		std::cout << hline << std::endl;
-		std::cout << "# Input loaded and objects prepared in " << timer.toc() << " seconds." << std::endl;
-		std::cout << hline << std::endl;
-	}
-
-	// Output all defined names and included files
-	if (showDefines)
-	{
-		auto fl = MSDParser::FileReader::GetFileList();
-		auto defnames = MSDParser::FileReader::GetDefinitions();
-
-		std::cout << "# Included files:" << std::endl;
-		for (auto i = fl.cbegin(); i != fl.cend(); i++)
-			std::cout << " - " << (*i) << std::endl;
-
-		std::cout << "\n# Defined names:" << std::endl;
-		for (auto i = defnames.cbegin(); i != defnames.cend(); i++)
+		// Output all the objects that were read from the input file
+		if (showObjects)
 		{
-			std::cout << " - " << i->first << ": ";
-			if (i->second.empty())
-				std::cout << "<empty>";
-			else
-				std::cout << i->second;
-			std::cout << std::endl;
+			rs.PrintSystems(showFullObjects);
+			std::cout << hline << std::endl;
 		}
-		std::cout << hline << std::endl;
-	}
 
-	// Output all the objects that were read from the input file
-	if (showObjects)
-	{
-		rs.PrintSystems(showFullObjects);
-		std::cout << hline << std::endl;
-	}
-
-	// If a list of ActionTargets has been requested, print them
-	if (printActionTargets)
-	{
-		auto actionScalars = rs.GetActionScalars();
-		auto actionVectors = rs.GetActionVectors();
-		std::cout << "# ActionScalars:" << std::endl;
-		for (auto i = actionScalars.cbegin(); i != actionScalars.cend(); i++)
-			std::cout << " - " << i->first << ((i->second.IsReadonly()) ? " (readonly)" : "") << std::endl;
-		std::cout << "\n# ActionVectors:" << std::endl;
-		for (auto i = actionVectors.cbegin(); i != actionVectors.cend(); i++)
-			std::cout << " - " << i->first << ((i->second.IsReadonly()) ? " (readonly)" : "") << std::endl;
-		std::cout << hline << std::endl;
-	}
-
-	// Definitions
-	auto steps = rs.GetSettings()->Steps();
-	double runtime = 0.0;
-	double totalruntime = 0.0;
-
-	// If we should do the calculations, do them
-	if (!noCalculations)
-	{
-		// Perform steps if we should start later than at step 1
-		for (unsigned int i = 1; i < firstStep && i <= steps; i++)
+		// If a list of ActionTargets has been requested, print them
+		if (printActionTargets)
 		{
-			rs.Step(i + 1);
+			auto actionScalars = rs.GetActionScalars();
+			auto actionVectors = rs.GetActionVectors();
+			std::cout << "# ActionScalars:" << std::endl;
+			for (auto i = actionScalars.cbegin(); i != actionScalars.cend(); i++)
+				std::cout << " - " << i->first << ((i->second.IsReadonly()) ? " (readonly)" : "") << std::endl;
+			std::cout << "\n# ActionVectors:" << std::endl;
+			for (auto i = actionVectors.cbegin(); i != actionVectors.cend(); i++)
+				std::cout << " - " << i->first << ((i->second.IsReadonly()) ? " (readonly)" : "") << std::endl;
+			std::cout << hline << std::endl;
 		}
 
-		// if(rs.GetSettings()->GetParallel() == true)
-		//{
-		//	//check that all actions have parallel turned on
-		//	for(unsigned int i = 0; i < rs.GetActions().size(); i++)
-		//	{
-		//		if(rs.GetActions()[i]->GetParallel() == true)
-		//		{
-		//			std::cout << rs.GetActions()[i]->Name() << " hasn't been enabled for parallelization" << std::endl;
-		//		}
-		//	}
-		//
-		//	//#pragma omp for parallel schedule(static,1)
-		//	for(unsigned int i = firstStep; i <= steps; i++)
-		//	{
-		//		if(stepLimit > 0 && i - firstStep >= )
-		//	}
-		//}
+		// Definitions
+		auto steps = rs.GetSettings()->Steps();
+		double runtime = 0.0;
+		double totalruntime = 0.0;
 
-		for (unsigned int i = firstStep; i <= steps; i++)
+		// If we should do the calculations, do them
+		if (!noCalculations)
 		{
-			// Check that we have not exceeded the step limit (if any)
-			if (stepLimit > 0 && i - firstStep >= stepLimit)
+			// Perform steps if we should start later than at step 1
+			for (unsigned int i = 1; i < firstStep && i <= steps; i++)
 			{
-				steps = stepLimit; // This is the number of steps that was run, and which is used to calculate the average time per step
-				break;
+				rs.Step(i + 1);
 			}
 
-			// Information about the step we are about to run
-			if (!silentMode && i % reportSteps == 0)
+			// if(rs.GetSettings()->GetParallel() == true)
+			//{
+			//	//check that all actions have parallel turned on
+			//	for(unsigned int i = 0; i < rs.GetActions().size(); i++)
+			//	{
+			//		if(rs.GetActions()[i]->GetParallel() == true)
+			//		{
+			//			std::cout << rs.GetActions()[i]->Name() << " hasn't been enabled for parallelization" << std::endl;
+			//		}
+			//	}
+			//
+			//	//#pragma omp for parallel schedule(static,1)
+			//	for(unsigned int i = firstStep; i <= steps; i++)
+			//	{
+			//		if(stepLimit > 0 && i - firstStep >= )
+			//	}
+			//}
+
+			for (unsigned int i = firstStep; i <= steps; i++)
 			{
-				std::cout << "# Now running step " << i << "/" << steps << "." << std::endl;
-				std::cout << hline << std::endl;
+				// Check that we have not exceeded the step limit (if any)
+				if (stepLimit > 0 && i - firstStep >= stepLimit)
+				{
+					steps = stepLimit; // This is the number of steps that was run, and which is used to calculate the average time per step
+					break;
+				}
+
+				// Information about the step we are about to run
+				if (!silentMode && i % reportSteps == 0)
+				{
+					std::cout << "# Now running step " << i << "/" << steps << "." << std::endl;
+					std::cout << hline << std::endl;
+				}
+
+				// Start the timer
+				timer.tic();
+
+				// Run all the tasks in the RunSection - skip some if we have a checkpoint
+				if (hasCheckpoint)
+				{
+					rs.Run(checkpoint, i);
+					hasCheckpoint = false; // We only use the checkpoint for one step
+				}
+				else
+				{
+					rs.Run(i);
+				}
+
+				// Advance to the next calculation step
+				rs.Step(i + 1);
+
+				// Get the time for the step
+				runtime = timer.toc();
+				totalruntime += runtime;
+
+				// Show time for the step after it finished
+				if (!silentMode && i % reportSteps == 0)
+				{
+					std::cout << hline << std::endl;
+					std::cout << "# Finished with step " << i << "/" << steps << " in " << runtime << " seconds." << std::endl;
+				}
 			}
 
-			// Start the timer
-			timer.tic();
-
-			// Run all the tasks in the RunSection - skip some if we have a checkpoint
-			if (hasCheckpoint)
-			{
-				rs.Run(checkpoint, i);
-				hasCheckpoint = false; // We only use the checkpoint for one step
-			}
-			else
-			{
-				rs.Run(i);
-			}
-
-			// Advance to the next calculation step
-			rs.Step(i + 1);
-
-			// Get the time for the step
-			runtime = timer.toc();
-			totalruntime += runtime;
-
-			// Show time for the step after it finished
-			if (!silentMode && i % reportSteps == 0)
-			{
-				std::cout << hline << std::endl;
-				std::cout << "# Finished with step " << i << "/" << steps << " in " << runtime << " seconds." << std::endl;
-			}
+			std::cout << hline << std::endl;
+			std::cout << "# Calculations done in " << totalruntime << " seconds, with an average runtime per step of " << (totalruntime / (double)steps) << " seconds." << std::endl;
+		}
+		else
+		{
+			std::cout << hline << std::endl;
+			std::cout << "# Shutting down without doing calculations." << std::endl;
 		}
 
-		std::cout << hline << std::endl;
-		std::cout << "# Calculations done in " << totalruntime << " seconds, with an average runtime per step of " << (totalruntime / (double)steps) << " seconds." << std::endl;
+		return 0;
 	}
-	else
+	catch(const std::exception&)
 	{
-		std::cout << hline << std::endl;
-		std::cout << "# Shutting down without doing calculations." << std::endl;
+		std::cerr << "MolSpin terminated early" << std::endl;
+		return EXIT_FAILURE;
 	}
-
-	return 0;
 }
 
 //////////////////////////////////////////////////////////////////////////////

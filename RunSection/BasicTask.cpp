@@ -19,13 +19,26 @@
 #include "Transition.h"
 #include "SpinSystem.h"
 
+// #ifdef USE_OPENBLAS
+extern "C" void openblas_set_num_threads(int);
+// #endif
+
 namespace RunSection
 {
-	// -----------------------------------------------------
+
+	arma::cx_vec operator+ (const std::pair<int, arma::cx_vec> &a, const std::pair<int, arma::cx_vec> &b) {
+		return a.second + b.second;
+	};
+
+	double operator+ (const std::pair<int, double> &a, const std::pair<int, double> &b) {
+		return a.second + b.second;
+	};
+
+    // -----------------------------------------------------
 	// BasicTask Constructors and Destructor
 	// -----------------------------------------------------
 	BasicTask::BasicTask(const MSDParser::ObjectParser &_properties, const RunSection &_runsection) : properties(std::make_shared<MSDParser::ObjectParser>(_properties)), runsection(_runsection), output(),
-																									  isValid(false), isValidated(false), scalars(nullptr), vectors(nullptr), usedScalars(), usedVectors()
+																									  isValid(false), isValidated(false), scalars(nullptr), vectors(nullptr), usedScalars(), usedVectors(), name(TaskName::DEFULAT)
 	{
 		if (!_runsection.noCalculations)
 		{
@@ -236,6 +249,269 @@ namespace RunSection
 			return;
 		}
 		this->prop = Propagator::Default;
+    }
+
+	void BasicTask::GetSamples(std::vector<arma::sp_cx_mat>& H, arma::sp_cx_mat& A, std::vector<SCData>& ori, std::vector<std::vector<double>>& SampleWeights, std::vector<std::vector<std::vector<double>>>& AllWeights)
+    {
+		std::vector<SampleCombination> Combinations; 
+		std::vector<std::vector<int>> samples;
+		std::vector<arma::sp_cx_mat> sampleHSC;
+		for(auto i : ori)
+		{
+			samples.push_back(i.samples);
+			sampleHSC.push_back(i.SamplesMatrix);
+		}
+		Combinations = GenerateCombinationsNI(samples);
+		for(unsigned int i = 0; i < Combinations.size(); i++)
+		{
+			H.push_back(GetHamiltonian(A,ori.size(),sampleHSC,Combinations[i]));
+			std::vector<double> weights;
+			for(unsigned int j = 0; j < Combinations[i].size(); j++)
+			{
+				for(unsigned int k = 0; k < Combinations[i][j].size(); k++)
+				{
+					weights.push_back(AllWeights[j][k][Combinations[i][j][k]]);
+				}
+			}
+			SampleWeights.push_back(weights);
+		}
+    }
+
+    void BasicTask::SCDirectEvaluation(SpinAPI::system_ptr& i, arma::sp_cx_mat& A, SCData& Data, arma::cx_vec& rho0vec, arma::cx_vec &ReturnVec)
+    {
+
+		std::vector<std::pair<int,arma::cx_vec>> SCresults;
+		std::vector<std::pair<int,double>> SCweights;
+		std::vector<arma::sp_cx_mat> As;
+		std::vector<std::vector<std::vector<double>>> AllWeights = {{}};
+		std::pair<std::vector<double>,std::vector<int>> BLandSamples;
+		std::vector<std::vector<double>> SampleSpacing;
+		std::vector<std::vector<double>> SampleWeights;
+
+		{
+			for(auto e = i->interactions_cbegin(); e != i->interactions_cend(); e++)
+			{
+				if((*e)->Type() == SpinAPI::InteractionType::SemiClassicalField)
+				{
+					AllWeights[0].push_back((*e)->GetOriWeights());
+					std::vector<double> BL = (*e)->VL();
+					double BMax = std::reduce(BL.begin(), BL.end());
+					BLandSamples.first.push_back(BMax);
+					BLandSamples.second.push_back((*e)->Orientations());
+					SampleSpacing.push_back((*e)->GetSpacing());
+				}
+			}
+		}
+		std::vector<SCData> SysData= {Data};
+		GetSamples(As,A, SysData, SampleWeights, AllWeights);
+		this->Log() << "Ready to perform calculation." << std::endl;
+		
+		//#pragma omp parallel for
+		openblas_set_num_threads(1);
+		#pragma omp parallel for
+		for (unsigned int i = 0; i < As.size(); i++)
+		{
+			arma::cx_vec result = -1 * solve(arma::conv_to<arma::cx_mat>::from(As[i]), rho0vec);
+			std::cout << "Sample " << i << " trace: " << arma::trace(arma::reshape(result, std::sqrt(result.n_rows), std::sqrt(result.n_rows))) << std::endl;
+			std::vector<double> weights = SampleWeights[i];
+			double weight_product = 1.0;
+			for(unsigned int j = 0; j < weights.size(); j++)
+			{
+				result *= weights[j];
+				weight_product *= weights[j];
+			}
+			#pragma omp critical
+			{
+				SCresults.push_back({i,result});
+				SCweights.push_back({i,weight_product});
+			}
+		}
+		std::pair<arma::cx_vec, double> results = IntegrateSC(SCresults, SCweights, SCIntegrationProperties{BLandSamples.first, BLandSamples.second, SampleSpacing});
+		arma::cx_vec result = arma::zeros<arma::cx_vec>(rho0vec.n_rows);
+		result = results.first;
+		ReturnVec = result;		
+    }
+
+    std::pair<arma::cx_vec,double> BasicTask::IntegrateSC(std::vector<std::pair<int,arma::cx_vec>>& rhoSC, std::vector<std::pair<int,double>>& rhoweights, SCIntegrationProperties props)
+    {
+		auto SCresultsSort = [](const std::pair<int,arma::cx_vec> &a, const std::pair<int,arma::cx_vec> &b) {
+				return a.first < b.first;
+			};
+		auto SCweightsSort = [](const std::pair<int,double> &a, const std::pair<int,double> &b) {
+				return a.first < b.first;
+			};
+
+		std::sort(rhoSC.begin(), rhoSC.end(), SCresultsSort);
+		std::sort(rhoweights.begin(), rhoweights.end(), SCweightsSort);
+
+		arma::cx_vec result(rhoSC[0].second.n_rows,arma::fill::zeros);
+		int dimensions = props.maxBondLenght.size();
+		std::vector<std::vector<double>> stepsizes; 
+		for(int i = 0; i < dimensions; i++)
+		{
+			stepsizes.push_back(props.spacing[i]);
+		}
+		std::vector<double> slice;
+		std::vector<arma::cx_vec> sliceV;
+
+		struct Trapezium
+		{
+			double L1;
+			arma::cx_vec V1;
+			double L2;
+			arma::cx_vec V2;
+			double gap;
+			double value;
+			arma::cx_vec VectorValue;
+			int dimension;
+			int sample;
+
+			double Eval()
+			{
+				VectorValue = 0.5 *(V1 + V2) * gap;
+				return 0.5 * (L1 + L2) * gap;
+			}
+		};
+
+		std::vector<Trapezium> trapezia;
+		for(unsigned int i = 0; i < rhoweights.size(); i++)
+		{
+			slice.push_back(rhoweights[i].second);
+			sliceV.push_back(rhoSC[i].second);
+		}
+		//first create all the 2d trapezia
+		int sample = 0;
+		int index = 0; 
+		for(unsigned int i = 0; i <= slice.size()-1; i++)
+		{
+			if ((index+1) % props.numSamples[dimensions-1] == 0 && i != 0)
+			{
+				sample++;
+				index = 0;
+				continue;
+			}
+			Trapezium t;
+			t.L1 = slice[i];
+			t.L2 = slice[i+1];
+			t.V1 = sliceV[i];
+			t.V2 = sliceV[i+1];
+			t.gap = stepsizes[dimensions-1][index+1] - stepsizes[dimensions-1][index];
+			t.dimension = 1;
+			t.sample = sample;
+			t.value = t.Eval();
+			index++;
+			if(t.value < 0)
+			{
+				std::cin.get();
+			}
+			trapezia.push_back(t);
+		}
+
+		//evaluates the 2d trapezia
+		int samplesize = props.numSamples[props.numSamples.size() - 1] - 1;
+		auto Eval = [](std::vector<Trapezium>& trapezia, int dim, int samplesize) {
+			double area = trapezia[0].value;
+			arma::cx_vec V = trapezia[0].VectorValue;
+			for(int e = 1; e < samplesize; e++)
+			{
+				area += trapezia[e].value;
+				V += trapezia[e].VectorValue;
+			}
+			Trapezium t;
+			t.value = area;
+			t.dimension = dim;
+			t.VectorValue = V;
+			trapezia.clear();
+			return t;
+		};
+
+		std::vector<Trapezium> NewTrapezia;
+		std::vector<Trapezium> TempTrapezia;
+		for(unsigned int i = 0; i < trapezia.size(); i++)
+		{
+			if(i % samplesize == 0 && i != 0)
+			{
+				NewTrapezia.push_back(Eval(TempTrapezia,1, samplesize));
+			}
+			TempTrapezia.push_back(trapezia[i]);
+		}
+		NewTrapezia.push_back(Eval(TempTrapezia,1,samplesize));
+		trapezia = NewTrapezia;
+		NewTrapezia.clear();
+
+		//recursive function that evaluates the integral for n dimensions (starts at the 2nd dimension)
+		//each loop creates new sets of "trapezia" so each dimension can be treated as having 1d integration.
+		//recursivly goes down until theres one dimension to work and the the "trapezia" it calculates is then propogated back up the stack
+		//New trapezia should have a length of one by the end of the last loop
+		std::function<std::vector<Trapezium>(std::vector<Trapezium>, std::vector<int>)> Eval2;
+		int depth = 0;
+		Eval2 = [&depth, &Eval2, &stepsizes, &result](std::vector<Trapezium> trapezia, std::vector<int> samples) {
+			int dimensions = samples.size();
+			if(dimensions != 1)
+			{
+				std::vector<int> samples2(samples.begin() + 1, samples.begin() + dimensions);
+				depth += 1;
+				trapezia = Eval2(trapezia, samples2);
+				depth -= 1;
+			}
+			std::vector<Trapezium> NewTrapezia;
+			std::vector<Trapezium> TempTrapezia;
+			int ss= samples[0]-1;
+			for(unsigned int i = 0; i <= trapezia.size(); i++)
+			{
+				if(i % (ss+1) == 0 && i != 0)
+				{	
+					double vol = 0;
+					arma::cx_vec V = result;
+					for(unsigned int e = 0; e < TempTrapezia.size()-1; e++)
+					{
+						double gap = stepsizes[depth][e+1] - stepsizes[depth][e];
+						Trapezium t2;
+						t2.L1 = TempTrapezia[e].value;
+						t2.L2 = TempTrapezia[e+1].value;
+						t2.V1 = TempTrapezia[e].VectorValue;
+						t2.V2 = TempTrapezia[e+1].VectorValue;
+						t2.gap = gap;
+						t2.value = t2.Eval();
+						vol += t2.value;
+						V += t2.VectorValue;
+					}
+					TempTrapezia.clear();
+					Trapezium t;
+					t.value = vol;
+					t.VectorValue = V;
+					t.dimension = depth + 1;
+					NewTrapezia.push_back(t);
+					if(i == trapezia.size())
+					{
+						break;
+					}
+				}
+				TempTrapezia.push_back(trapezia[i]);
+			}
+			return NewTrapezia;
+		};
+
+		std::vector<int> NumOfTrapezia = {};
+		for(int i = 1; i < dimensions; i++)
+		{
+			NumOfTrapezia.push_back(props.numSamples[dimensions-i-1]);
+		}
+		if(NumOfTrapezia.size() != 0)
+			trapezia = Eval2(trapezia, NumOfTrapezia);
+		
+
+		double totalIntegral = 0.0;
+		arma::cx_vec totalVec = result;
+		index = 0;
+		for(auto t : trapezia)
+		{
+			totalIntegral += t.value;
+			totalVec += t.VectorValue;
+			index += 1;
+		}
+		return {totalVec,totalIntegral};
+
     }
 
     // Method that provides access to the calculation settings

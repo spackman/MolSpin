@@ -389,6 +389,7 @@ namespace SpinAPI
 		}
 
 		// TODO: Remove range failedInteractions from this->interactions
+		RemoveFailedObjects<interaction_ptr>(failedInteractions,this->interactions);
 		return failedInteractions;
 	}
 
@@ -405,6 +406,7 @@ namespace SpinAPI
 		}
 
 		// TODO: Remove range failedTransitions from this->transitions
+		RemoveFailedObjects<transition_ptr>(failedTransitions, this->transitions);
 		return failedTransitions;
 	}
 
@@ -421,6 +423,7 @@ namespace SpinAPI
 		}
 
 		// TODO: Remove range failedOperators from this->operators
+		RemoveFailedObjects<operator_ptr>(failedOperators, this->operators);
 		return failedOperators;
 	}
 
@@ -440,7 +443,8 @@ namespace SpinAPI
 				failedPulses.push_back(*i);
 			}
 		}
-
+		
+		RemoveFailedObjects<pulse_ptr>(failedPulses, this->pulses);
 		return failedPulses;
 	}
 
@@ -457,6 +461,7 @@ namespace SpinAPI
 		}
 
 		// TODO: Remove range failedStates from this->states
+		RemoveFailedObjects<state_ptr>(failedStates, this->states);
 		return failedStates;
 	}
 
@@ -470,6 +475,8 @@ namespace SpinAPI
 				failedSubSystems.push_back(*i);
 			}
 		}
+
+		RemoveFailedObjects<subsystem_ptr>(failedSubSystems, this->subsystems);
 		return failedSubSystems;
 	}
 	// -----------------------------------------------------

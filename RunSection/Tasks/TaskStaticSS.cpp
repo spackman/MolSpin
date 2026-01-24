@@ -14,6 +14,8 @@
 #include "SpinSpace.h"
 #include "SpinSystem.h"
 #include "ObjectParser.h"
+#include "Utility.h"
+#include "Interaction.h"
 
 namespace RunSection
 {
@@ -170,15 +172,18 @@ namespace RunSection
 
 			// Get the Hamiltonian
 			arma::sp_cx_mat H;
-			if (!space.Hamiltonian(H))
+			if (!space.Hamiltonian(H, static_cast<int>(this->name)))
 			{
 				this->Log() << "Failed to obtain Hamiltonian in superspace." << std::endl;
 				continue;
 			}
 
-			// Get a matrix to collect all the terms (the total Liouvillian)
-			arma::sp_cx_mat A = arma::cx_double(0.0, -1.0) * H;
+			//code needed for the semi-classical interaction
+			SCData DataStruct = GetHamiltonian(H,space.SpaceDimensions());
+			arma::sp_cx_mat A = arma::cx_double(0.0, -1.0) * DataStruct.H;
 
+
+			// Get a matrix to collect all the terms (the total Liouvillian)
 			// Get the reaction operators, and add them to "A"
 			arma::sp_cx_mat K;
 			if (!space.TotalReactionOperator(K))
@@ -199,9 +204,30 @@ namespace RunSection
 			}
 
 			// Perform the calculation
-			this->Log() << "Ready to perform calculation." << std::endl;
-			arma::cx_vec result = solve(arma::conv_to<arma::cx_mat>::from(A), rho0vec);
+
+			//code needed for the semi-classical interaction
+			bool SC = false;	
+			arma::cx_vec result;
+			if(DataStruct.SamplesMatrix.n_nonzero != 0)
+			{
+				SC = true;
+			}
+			if(SC)
+			{
+				SpinAPI::system_ptr ptr = (*i);
+				SCDirectEvaluation(ptr, A, DataStruct, rho0vec, result);
+			}
+			else
+			{
+				result = -1 * solve(arma::conv_to<arma::cx_mat>::from(A), rho0vec);
+			}
+			
+			//arma::cx_vec result2 = solve(arma::conv_to<arma::cx_mat>::from(A), rho0vec);
+			std::cout << "Trace of final result: " << arma::trace(arma::reshape(result, std::sqrt(result.n_rows), std::sqrt(result.n_rows))) << std::endl;
 			this->Log() << "Done with calculation." << std::endl;
+
+			std::cout << result << std::endl;
+			//std::cout << result2 << std::endl;
 
 			// Convert the resulting density operator back to its Hilbert space representation
 			if (!space.OperatorFromSuperspace(result, rho0))
@@ -299,6 +325,7 @@ namespace RunSection
 	bool TaskStaticSS::Validate()
 	{
 		this->Properties()->Get("transitionyields", this->productYieldsOnly);
+		this->name = TaskName::STATICSS;
 
 		// Get the reacton operator type
 		std::string str;

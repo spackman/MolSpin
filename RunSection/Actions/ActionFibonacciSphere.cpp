@@ -9,6 +9,7 @@
 #include "ObjectParser.h"
 
 #include <array>
+#include "Utility.h"
 
 namespace RunSection
 {
@@ -30,8 +31,7 @@ namespace RunSection
 
     bool ActionFibonacciSphere::CalculatePoints(int n)
     {
-        m_Points = (point *)malloc(n * sizeof(point));
-        m_Num = n;
+        m_Points = CalculateFibPoints(n);
 
         if (m_Points == NULL)
         {
@@ -39,14 +39,6 @@ namespace RunSection
             return false;
         }
 
-        double phi = M_PI * (3.0 - std::sqrt(5.0)); // golden angle in radians;
-        for (int i = 0; i < n; i++)
-        {
-            double y = 1.0 - ((double)i / double(n - 1)) * 2;
-            double theta = phi * (double)i;
-
-            m_Points[i] = {y, theta};
-        }
         return true;
     }
 
@@ -56,22 +48,16 @@ namespace RunSection
         {
             return false;
         }
+        bool PointRetrieved = RetrievePoint(arr,m_Points,m_Step);
 
-        auto p = m_Points[m_Step];
-
-        float y = p.first;
-        float theta = p.second;
-
-        double r = std::sqrt(1.0 - (y * y));
-        double x = m_Magnitude * std::cos(theta) * r;
-        double z = m_Magnitude * std::sin(theta) * r;
+        double x = m_Magnitude * arr[0];
+        double y = m_Magnitude * arr[1];
+        double z = m_Magnitude * arr[2];
 
         m_Step++;
 
-        y = y * m_Magnitude;
-
         arr = {x, y, z};
-        return true;
+        return PointRetrieved;
     }
 
     bool ActionFibonacciSphere::DoStep()
