@@ -1071,7 +1071,7 @@ namespace SpinAPI
 			if(tensorvalues.size() > num)
 			{
 				std::cout << "Will only be using the first " << num << " values: ";
-				for(int i = 0; i < num; i++)
+				for(int i = 0; i <int(num); i++)
 				{
 					std::cout << tensorvalues[i] << " ";
 				}
@@ -1082,7 +1082,7 @@ namespace SpinAPI
 				std::cout << "Missing tensor values in semi classical interaction hyperfine field definition." << std::endl;
 				std::cout << "Set of values that will be used: ";
 				int tensorvaluessize = tensorvalues.size();
-				for(int i = 0; i < num; i++)
+				for(int i = 0; i < int(num); i++)
 				{
 					if(i < tensorvaluessize)
 					{

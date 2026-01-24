@@ -1348,7 +1348,7 @@ namespace SpinAPI
 		}
 
 		arma::cx_mat tmp;
-		bool semiclassical = false;
+		// bool semiclassical = false;
 		std::vector<interaction_ptr> SemiClassicalInteractions = {};
 		for (auto i = this->interactions.cbegin(); i != this->interactions.cend(); i++)
 		{
@@ -1360,7 +1360,7 @@ namespace SpinAPI
 			if((*i)->Type() == InteractionType::SemiClassicalField)
 			{
 				SemiClassicalInteractions.push_back((*i));
-				semiclassical = true;
+				// semiclassical = true;
 				continue;
 			}
 			// Attempt to get the matrix representing the Interaction object in the spin space
@@ -1385,7 +1385,7 @@ namespace SpinAPI
 		}
 
 		arma::sp_cx_mat tmp;
-		bool semiclassical = false;
+		// bool semiclassical = false;
 		std::vector<interaction_ptr> SemiClassicalInteractions = {};
 		for (auto i = this->interactions.cbegin(); i != this->interactions.cend(); i++)
 		{
@@ -1397,7 +1397,7 @@ namespace SpinAPI
 			if((*i)->Type() == InteractionType::SemiClassicalField)
 			{
 				SemiClassicalInteractions.push_back((*i));
-				semiclassical = true;
+				// semiclassical = true;
 				continue;
 			}
 			if (!this->InteractionOperator((*i), tmp))
@@ -1422,7 +1422,7 @@ namespace SpinAPI
 		}
 
 		arma::cx_mat tmp;
-		bool semiclassical = false;
+		// bool semiclassical = false;
 		std::vector<interaction_ptr> SemiClassicalInteractions = {};
 		for (auto i = this->interactions.cbegin(); i != this->interactions.cend(); i++)
 		{
@@ -1434,7 +1434,7 @@ namespace SpinAPI
 			if((*i)->Type() == InteractionType::SemiClassicalField)
 			{
 				SemiClassicalInteractions.push_back((*i));
-				semiclassical = true;
+				// semiclassical = true;
 				continue;
 			}
 			if (!this->InteractionOperator((*i), tmp))
@@ -1459,7 +1459,7 @@ namespace SpinAPI
 		}
 
 		arma::sp_cx_mat tmp;
-		bool semiclassical = false;
+		// bool semiclassical = false;
 		std::vector<interaction_ptr> SemiClassicalInteractions = {};
 		for (auto i = this->interactions.cbegin(); i != this->interactions.cend(); i++)
 		{
@@ -1470,7 +1470,7 @@ namespace SpinAPI
 			if((*i)->Type() == InteractionType::SemiClassicalField)
 			{
 				SemiClassicalInteractions.push_back((*i));
-				semiclassical = true;
+				// semiclassical = true;
 				continue;
 			}
 			// Attempt to get the matrix representing the Interaction object in the spin space
@@ -1496,7 +1496,7 @@ namespace SpinAPI
 		}
 
 		arma::cx_mat tmp;
-		bool semiclassical = false;
+		// bool semiclassical = false;
 		std::vector<interaction_ptr> SemiClassicalInteractions = {};
 		for (auto i = this->interactions.cbegin(); i != this->interactions.cend(); i++)
 		{
@@ -1511,7 +1511,7 @@ namespace SpinAPI
 				if((*i)->Type() == InteractionType::SemiClassicalField)
 				{
 					SemiClassicalInteractions.push_back((*i));
-					semiclassical = true;
+					// semiclassical = true;
 					continue;
 				}
 				if (!this->InteractionOperator((*i), tmp))
@@ -1537,7 +1537,7 @@ namespace SpinAPI
 		}
 
 		arma::cx_mat tmp;
-		bool semiclassical = false;
+		// bool semiclassical = false;
 		std::vector<interaction_ptr> SemiClassicalInteractions = {};
 		for (auto i = this->interactions.cbegin(); i != this->interactions.cend(); i++)
 		{
@@ -1551,7 +1551,7 @@ namespace SpinAPI
 				if((*i)->Type() == InteractionType::SemiClassicalField)
 				{
 					SemiClassicalInteractions.push_back((*i));
-					semiclassical = true;
+					// semiclassical = true;
 					continue;
 				}
 				// Attempt to get the matrix representing the Interaction object in the spin space
@@ -1578,7 +1578,7 @@ namespace SpinAPI
 			}
 
 			arma::sp_cx_mat tmp;
-			bool semiclassical = false;
+			// bool semiclassical = false;
 			std::vector<interaction_ptr> SemiClassicalInteractions = {};
 			for (auto i = this->interactions.cbegin(); i != this->interactions.cend(); i++)
 			{
@@ -1592,7 +1592,7 @@ namespace SpinAPI
 					if((*i)->Type() == InteractionType::SemiClassicalField)
 					{
 						SemiClassicalInteractions.push_back((*i));
-						semiclassical = true;
+						// semiclassical = true;
 						continue;
 					}
 					// Attempt to get the matrix representing the Interaction object in the spin space
@@ -1619,7 +1619,7 @@ namespace SpinAPI
 			}
 
 			arma::sp_cx_mat tmp;
-			bool semiclassical = false;
+			// bool semiclassical = false;
 			std::vector<interaction_ptr> SemiClassicalInteractions = {};
 			for (auto i = this->interactions.cbegin(); i != this->interactions.cend(); i++)
 			{
@@ -1633,7 +1633,7 @@ namespace SpinAPI
 					if((*i)->Type() == InteractionType::SemiClassicalField)
 					{
 						SemiClassicalInteractions.push_back((*i));
-						semiclassical = true;
+						//semiclassical = true;
 						continue;
 					}
 					// Attempt to get the matrix representing the Interaction object in the spin space
