@@ -774,7 +774,7 @@ namespace RunSection
 
 					// Build rotated base Hamiltonian
 					arma::sp_cx_mat H0_sp;
-					if (!space.BaseHamiltonianRotated(h0list, Rot, H0_sp))
+					if (!space.BaseHamiltonianRotatedZXZ(h0list, Rot, H0_sp))
 						continue;
 
 					arma::vec eigval;
@@ -798,7 +798,7 @@ namespace RunSection
 
 					// Zeeman-only rotated Hamiltonian -> dH/dB magnitude for field-to-energy Jacobian.
 					arma::sp_cx_mat Hz_sp;
-					if (!space.BaseHamiltonianRotated(zeelist, Rot, Hz_sp))
+					if (!space.BaseHamiltonianRotatedZXZ(zeelist, Rot, Hz_sp))
 						continue;
 					arma::sp_cx_mat dHdB_sp = Hz_sp / Bmag; // rad/ns/T
 					// For Hermitian dHdB, Re(<n|dHdB|n> - <m|dHdB|m>) gives d(En-Em)/dB.
@@ -1827,13 +1827,13 @@ namespace RunSection
 				{
 					Hstatic_sp = arma::zeros<arma::sp_cx_mat>(dim, dim);
 				}
-				else if (!space.BaseHamiltonianRotated(h0list_noB, Rot, Hstatic_sp))
+				else if (!space.BaseHamiltonianRotatedZXZ(h0list_noB, Rot, Hstatic_sp))
 				{
 					continue;
 				}
 
 				arma::sp_cx_mat Hz_sp;
-				if (!space.BaseHamiltonianRotated(zeelist, Rot, Hz_sp))
+				if (!space.BaseHamiltonianRotatedZXZ(zeelist, Rot, Hz_sp))
 					continue;
 				const bool can_block = hasMzBlocks && IsBlockDiagonalMz(Hstatic_sp, mzBlocks.mz2, 1e-12) && IsBlockDiagonalMz(Hz_sp, mzBlocks.mz2, 1e-12);
 				arma::cx_mat Hstatic = arma::cx_mat(Hstatic_sp);
