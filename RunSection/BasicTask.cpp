@@ -93,6 +93,13 @@ namespace RunSection
 				}
 			}
 		}
+
+		auto settings = _runsection.GetSettings();
+		if (settings != nullptr)
+		{
+			this->output.SetDataPrecision(settings->DataPrecision());
+			this->output.SetLogPrecision(settings->LogPrecision());
+		}
 	}
 
 	BasicTask::~BasicTask()
