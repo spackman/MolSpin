@@ -307,7 +307,6 @@ namespace RunSection
 		this->Log() << "Ready to perform calculation." << std::endl;
 		
 		//#pragma omp parallel for
-		openblas_set_num_threads(1);
 		#pragma omp parallel for
 		for (unsigned int i = 0; i < As.size(); i++)
 		{
