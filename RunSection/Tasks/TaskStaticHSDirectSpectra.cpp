@@ -766,7 +766,7 @@ namespace RunSection
 				if (hasH0list)
 				{
 					arma::sp_cx_mat H0;
-					if (!space_thread.BaseHamiltonianRotated(HamiltonianH0list, Rot_mat, H0))
+					if (!space_thread.BaseHamiltonianRotated_SA(HamiltonianH0list, Rot_mat, H0))
 					{
 						this->Log() << "Failed to obtain rotated Hamiltonian for SpinSystem \"" << (*i)->Name() << "\"." << std::endl;
 						continue;

@@ -768,11 +768,6 @@ namespace RunSection
 								auto transitions = (*i)->Transitions();
 								for (auto j = transitions.cbegin(); j != transitions.cend(); j++)
 								{
-								//_stream << (*i)->Name() << "." << (*l)->Name() << "." << (*j)->Name() << ".yield"	<< ".Ix ";
-								//_stream << (*i)->Name() << "." << (*l)->Name() << "." << (*j)->Name() << ".yield" << ".Iy ";
-								//_stream << (*i)->Name() << "." << (*l)->Name() << "." << (*j)->Name() << ".yield" << ".Iz ";
-								//_stream << (*i)->Name() << "." << (*l)->Name() << "." << (*j)->Name() << ".yield" << ".Ip ";
-								//_stream << (*i)->Name() << "." << (*l)->Name() << "." << (*j)->Name() << ".yield" << ".Im ";
 								_stream << (*i)->Name() << "." << (*l)->Name() << "." << (*j)->Name() << ".yield" << Lx;
 								_stream << (*i)->Name() << "." << (*l)->Name() << "." << (*j)->Name() << ".yield" << Ly;
 								_stream << (*i)->Name() << "." << (*l)->Name() << "." << (*j)->Name() << ".yield" << Lz;
@@ -784,11 +779,6 @@ namespace RunSection
 						{
 							// Write each state name
 							auto states = (*i)->States();
-							//_stream << (*i)->Name() << "." << (*l)->Name() << ".Ix ";
-							//_stream << (*i)->Name() << "." << (*l)->Name() << ".Iy ";
-							//_stream << (*i)->Name() << "." << (*l)->Name() << ".Iz ";
-							//_stream << (*i)->Name() << "." << (*l)->Name() << ".Ip ";
-							//_stream << (*i)->Name() << "." << (*l)->Name() << ".Im ";
 							_stream << (*i)->Name() << "." << (*l)->Name() << Lx;
 							_stream << (*i)->Name() << "." << (*l)->Name() << Ly;
 							_stream << (*i)->Name() << "." << (*l)->Name() << Lz;

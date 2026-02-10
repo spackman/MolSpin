@@ -240,6 +240,14 @@ namespace RunSection
 				{
 					auto [theta, phi, weight] = grid[grid_num];
 
+					// Make the option without powdering from inside possible
+					if (numPoints <= 1)
+					{
+						theta = 0.0;
+						phi = 0.0;
+						weight = 1.0;
+					}
+
 					// Construct the rotation matrix
 					arma::mat Rot_mat;
 					double gamma = 0;
@@ -258,7 +266,7 @@ namespace RunSection
 					space.UseSuperoperatorSpace(false);
 					// Get the Hamiltonian
 					arma::sp_cx_mat H0;
-					if (!space.BaseHamiltonianRotated(HamiltonianH0list, Rot_mat, H0))
+					if (!space.BaseHamiltonianRotated_SA(HamiltonianH0list, Rot_mat, H0))
 					{
 						this->Log() << "Failed to obtain Hamiltonian in superspace." << std::endl;
 						continue;
@@ -358,6 +366,14 @@ namespace RunSection
 					{
 						auto [theta, phi, weight] = grid[grid_num];
 
+						// Make the option without powdering from inside possible
+						if (numPoints <= 1)
+						{
+							theta = 0.0;
+							phi = 0.0;
+							weight = 1.0;
+						}
+
 						// Initialize a first step
 						arma::cx_vec rhovec = rho0vec;
 
@@ -379,7 +395,7 @@ namespace RunSection
 						space.UseSuperoperatorSpace(false);
 						// Get the Hamiltonian
 						arma::sp_cx_mat H0;
-						if (!space.BaseHamiltonianRotated(HamiltonianH0list, Rot_mat, H0))
+						if (!space.BaseHamiltonianRotated_SA(HamiltonianH0list, Rot_mat, H0))
 						{
 							this->Log() << "Failed to obtain Hamiltonian in superspace." << std::endl;
 							continue;

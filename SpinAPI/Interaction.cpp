@@ -26,7 +26,7 @@ namespace SpinAPI
 																		 trjHasTime(false), trjHasField(false), trjHasTensor(false), trjHasPrefactor(false), trjTime(0), trjFieldX(0), trjFieldY(0), trjFieldZ(0), trjPrefactor(0),
 																		 tdFrequency(1.0), tdPhase(0.0), tdAxis("0 0 1"), tdPerpendicularOscillation(false), tdInitialField({0, 0, 0}), tensorType(InteractionTensorType::Static), tdTimestep(0),
 																		 tdInitialTensor(3, 3, arma::fill::zeros), tdMinFreq(0.0), tdMaxFreq(0.0), tdFreqs(), tdAmps(), tdPhases(), tdComponents(0), tdRandOrients(false), tdThetas(), tdPhis(), tdCorrTime(0.0),
-																		 tdPrintTensor(false), tdPrintField(false), hffield(), orientations(0), OriWeights(), BondLengths(), Spacing(), tau(0.0), dist(), tdSeed(0), tdAutoseed(false), tdGenerator(1), framelist({0, 0, 0}), f() //, tdFreqs(3, 3, arma::fill::zeros)//, tdFreqs({0,0,0})
+																		 tdPrintTensor(false), tdPrintField(false), hffield(), orientations(0), OriWeights(), BondLengths(), Spacing(), tau(0.0), dist(), tdSeed(0), tdAutoseed(false), tdGenerator(1), framelist({0, 0, 0}), f() 
 	{
 		// Is a trajectory specified?
 		std::string str;
@@ -77,7 +77,7 @@ namespace SpinAPI
 					this->type = InteractionType::SingleSpin;
 				}
 				std::vector<double> _framelist;
-				if (this->Properties()->GetList("orientation", _framelist)) // change to euler angles
+				if (this->Properties()->GetList("orientation", _framelist))
 				{
 					this->framelist = _framelist;
 				}
@@ -87,7 +87,28 @@ namespace SpinAPI
 				this->type = InteractionType::DoubleSpin;
 
 				std::vector<double> _framelist;
-				if (this->Properties()->GetList("orientation", _framelist)) //""
+				if (this->Properties()->GetList("orientation", _framelist))
+				{
+					this->framelist = _framelist;
+				}
+			}
+			else if (str.compare("dipole_sa") == 0 )
+			{
+				this->type = InteractionType::Dipolar_SA;
+
+				std::vector<double> _framelist;
+				if (this->Properties()->GetList ("orientation", _framelist))
+				{
+					this->framelist = _framelist;
+				}
+
+			}
+			else if (str.compare("hyperfine_sa") == 0 )
+			{
+				this->type = InteractionType::Hyperfine_SA;
+
+				std::vector<double> _framelist;
+				if (this->Properties()->GetList ("orientation", _framelist))
 				{
 					this->framelist = _framelist;
 				}
@@ -797,6 +818,10 @@ namespace SpinAPI
 			return true;
 		else if (this->type == InteractionType::DoubleSpin && !this->group1.empty() && !this->group2.empty())
 			return true;
+		else if (this->type == InteractionType::Dipolar_SA && !this->group1.empty() && !this->group2.empty())
+			return true;
+		else if (this->type == InteractionType::Hyperfine_SA && !this->group1.empty() && !this->group2.empty())
+			return true;
 			                else if (this->type == InteractionType::QuadraticSpin && !this->group1.empty())
                         return true;
 		else if (this->type == InteractionType::Exchange && !this->group1.empty() && !this->group2.empty())
@@ -1073,7 +1098,7 @@ namespace SpinAPI
 
 			createdSpinLists = this->AddSpinList(str, _spinlist, this->group1);
 		}
-		else if (this->type == InteractionType::DoubleSpin || this->type == InteractionType::Exchange)
+		else if (this->type == InteractionType::DoubleSpin || this->type == InteractionType::Exchange || this->type == InteractionType::Dipolar_SA || this->type == InteractionType::Hyperfine_SA)
 		{
 			// Attempt to get a list of spins from the input file
 			std::string str1;
@@ -1151,6 +1176,20 @@ namespace SpinAPI
 			result.insert(result.begin(), this->group1.cbegin(), this->group1.cend()); // Insert at the beginning of the vector
 			result.insert(result.end(), this->group2.cbegin(), this->group2.cend());   // Insert after the previously inserted spins
 		}
+		else if (this->type == InteractionType::Dipolar_SA &&
+			(std::find(this->group1.cbegin(), this->group1.cend(), _spin) != this->group1.cend() || std::find(this->group2.cbegin(), this->group2.cend(), _spin) != this->group2.cend()))
+		{
+			result.reserve(this->group1.size() + this->group2.size());				   // Reserve space for both groups to avoid more than 1 reallocation
+			result.insert(result.begin(), this->group1.cbegin(), this->group1.cend()); // Insert at the beginning of the vector
+			result.insert(result.end(), this->group2.cbegin(), this->group2.cend());   // Insert after the previously inserted spins
+		}
+		else if (this->type == InteractionType::Hyperfine_SA &&
+			(std::find(this->group1.cbegin(), this->group1.cend(), _spin) != this->group1.cend() || std::find(this->group2.cbegin(), this->group2.cend(), _spin) != this->group2.cend()))
+		{
+			result.reserve(this->group1.size() + this->group2.size());				   // Reserve space for both groups to avoid more than 1 reallocation
+			result.insert(result.begin(), this->group1.cbegin(), this->group1.cend()); // Insert at the beginning of the vector
+			result.insert(result.end(), this->group2.cbegin(), this->group2.cend());   // Insert after the previously inserted spins
+		}
 		else if (this->type == InteractionType::Exchange &&
 				 (std::find(this->group1.cbegin(), this->group1.cend(), _spin) != this->group1.cend() || std::find(this->group2.cbegin(), this->group2.cend(), _spin) != this->group2.cend()))
 		{
@@ -1188,7 +1227,7 @@ namespace SpinAPI
 		bool was_extended = false;
 
 		// Only the DoubleSpin interaction type couples spins
-		if (this->type == InteractionType::DoubleSpin || this->type == InteractionType::Exchange)
+		if (this->type == InteractionType::DoubleSpin || this->type == InteractionType::Exchange || this->type == InteractionType::Dipolar_SA || this->type == InteractionType::Hyperfine_SA)
 		{
 			bool containsInteractingSpins = false;
 

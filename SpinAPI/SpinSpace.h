@@ -90,6 +90,8 @@ namespace SpinAPI
 		bool useTrajectoryStep;		 // Set to true if trajectories should be used instead of time, where available
 		ReactionOperatorType reactionOperators;
 
+		bool CreateRotationMatrix(double &_alpha, double &_beta, double &_gamma, arma::mat &_R) const;
+
 	public:
 		// Constructors / Destructors
 		SpinSpace(); // Normal constructors
@@ -264,7 +266,7 @@ namespace SpinAPI
 		bool InteractionOperator(const interaction_ptr &, arma::cx_mat &) const;	// Returns the matrix representation of the interaction on the spin space (dense matrix)
 		bool InteractionOperator(const interaction_ptr &, arma::sp_cx_mat &) const; // Returns the matrix representation of the interaction on the spin space (sparse matrix)
 		bool InteractionOperatorRotatedZXZ(const interaction_ptr &, arma::mat &, arma::sp_cx_mat &) const;
-		bool InteractionOperatorRotated(const interaction_ptr &, arma::mat &, arma::sp_cx_mat &) const;
+		bool InteractionOperatorRotated_SA(const interaction_ptr &, arma::mat &, arma::sp_cx_mat &) const;
 		bool Hamiltonian(arma::cx_mat &, int TaskNum = 0) const;										// Total Hamiltonian operator (dense matrix)
 		bool Hamiltonian(arma::sp_cx_mat &, int TaskNum = 0) const;									// Total Hamiltonian operator (sparse matrix)
 		bool SemiClassicalHamiltonian(arma::sp_cx_mat &, std::vector<interaction_ptr>&) const; 					// SemiClassical approximation of the Hamiltonian (sparse matrix), refer to BasicTask.cpp for tasknum conversion
@@ -276,7 +278,7 @@ namespace SpinAPI
 		bool ThermalHamiltonian(std::vector<std::string> thermalhamiltonian_list, arma::cx_mat &_out) const;							// Time-independent part of the Hamiltonian for thermal state (dense matrix)
 		bool ThermalHamiltonian(std::vector<std::string> thermalhamiltonian_list, arma::sp_cx_mat &_out) const;							// Time-independent part of the Hamiltonian for thermal state (sparse matrix)
 		bool BaseHamiltonianRotatedZXZ(std::vector<std::string> basehamiltonian_list, arma::mat rotmatrix, arma::sp_cx_mat &_out) const;
-		bool BaseHamiltonianRotated(std::vector<std::string> basehamiltonian_list, arma::mat rotmatrix, arma::sp_cx_mat &_out) const;
+		bool BaseHamiltonianRotated_SA(std::vector<std::string> basehamiltonian_list, arma::mat rotmatrix, arma::sp_cx_mat &_out) const;
 
 		// ------------------------------------------------
 		// Transitions/decay operators (SpinSpace_transitions.cpp)
