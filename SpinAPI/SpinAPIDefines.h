@@ -33,6 +33,8 @@ namespace SpinAPI
 		Undefined,
 		SingleSpin,
 		DoubleSpin,
+		Dipolar_SA,
+		Hyperfine_SA,
 		QuadraticSpin,
 		Exchange,
 		Zfs,
